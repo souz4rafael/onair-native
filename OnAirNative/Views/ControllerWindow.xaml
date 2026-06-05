@@ -356,8 +356,10 @@
                     <TextBlock x:Name="AuthorsText" TextWrapping="Wrap"/>
                     <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                FontSize="12" TextWrapping="Wrap">
-                        GitHub: github.com/souz4rafael/onair-native (coming soon)
+                        github.com/souz4rafael/onair-native
                     </TextBlock>
+                    <HyperlinkButton Content="View source on GitHub"
+                                     NavigateUri="https://github.com/souz4rafael/onair-native"/>
 
                     <TextBlock Text="Keyboard shortcuts" FontWeight="SemiBold" Margin="0,12,0,0"/>
                     <Grid>
