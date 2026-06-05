@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- Target Windows 10 2004 (19041) minimum — required for WinUI 3 -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>OnAirNative</RootNamespace>
+    <AssemblyName>OnAirNative</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <!-- Unpackaged deployment — no MSIX required -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>preview</LangVersion>
+    <!-- Suppress the auto-generated XAML break-on-exception which fires in debug -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_BREAK_ON_UNHANDLED_EXCEPTION</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- App icon — copied to output folder so TrayService can load it at runtime -->
+    <Content Include="Assets\app-icon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Windows App SDK — provides WinUI 3, AppWindow, WebView2, etc. -->
+    <!-- Run: dotnet add package Microsoft.WindowsAppSDK -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.1.3" />
+    <!-- Windows SDK build tools (required by WinUI 3 codegen) -->
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.1839" PrivateAssets="all" />
+
+    <!-- MVVM source generators: [ObservableProperty], [RelayCommand] -->
+    <!-- Run: dotnet add package CommunityToolkit.Mvvm -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+
+    <!-- NAudio: WASAPI microphone capture + loopback (system audio) -->
+    <!-- Run: dotnet add package NAudio -->
+    <PackageReference Include="NAudio" Version="2.2.1" />
+
+    <!-- Whisper.net: in-process Whisper transcription (no Python subprocess) -->
+    <!-- Run: dotnet add package Whisper.net && dotnet add package Whisper.net.Runtime -->
+    <PackageReference Include="Whisper.net" Version="1.7.3" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.7.3" />
+  </ItemGroup>
+
+</Project>

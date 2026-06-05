@@ -1,0 +1,78 @@
+<ContentDialog
+    x:Class="OnAirNative.Views.Dialogs.ProviderConfigDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Configure Provider"
+    PrimaryButtonText="Save"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="500">
+        <StackPanel Spacing="12" Padding="0,4">
+
+            <!-- Provider name banner -->
+            <TextBlock x:Name="ProviderNameText"
+                       FontSize="18"
+                       FontWeight="SemiBold"/>
+
+            <!-- ─── Azure fields ──────────────────────────────────────── -->
+            <StackPanel x:Name="AzureFields" Spacing="8">
+                <TextBlock Text="Endpoint URL" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="AzureEndpoint"
+                         PlaceholderText="https://your-resource.openai.azure.com/"/>
+                <TextBlock Text="API Key" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <PasswordBox x:Name="AzureKey"
+                             PlaceholderText="••••••••••••••••••••••••••••"/>
+                <TextBlock Text="Whisper deployment name" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="AzureWhisperDep" PlaceholderText="whisper"/>
+                <TextBlock Text="Chat deployment name" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="AzureChatDep" PlaceholderText="gpt-4o"/>
+            </StackPanel>
+
+            <!-- ─── OpenAI fields ─────────────────────────────────────── -->
+            <StackPanel x:Name="OpenAiFields" Spacing="8" Visibility="Collapsed">
+                <TextBlock Text="API Key" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <PasswordBox x:Name="OpenAiKey" PlaceholderText="sk-…"/>
+                <TextBlock Text="Whisper model" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="OpenAiWhisperModel" PlaceholderText="whisper-1"/>
+                <TextBlock Text="Chat model" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="OpenAiChatModel" PlaceholderText="gpt-4o"/>
+            </StackPanel>
+
+            <!-- ─── Groq fields ───────────────────────────────────────── -->
+            <StackPanel x:Name="GroqFields" Spacing="8" Visibility="Collapsed">
+                <TextBlock Text="API Key" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <PasswordBox x:Name="GroqKey" PlaceholderText="gsk_…"/>
+                <TextBlock Text="Whisper model" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="GroqWhisperModel" PlaceholderText="whisper-large-v3"/>
+                <TextBlock Text="Chat model" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="GroqChatModel" PlaceholderText="llama-3.3-70b-versatile"/>
+            </StackPanel>
+
+            <!-- ─── Anthropic fields ──────────────────────────────────── -->
+            <StackPanel x:Name="AnthropicFields" Spacing="8" Visibility="Collapsed">
+                <TextBlock Text="API Key" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <PasswordBox x:Name="AnthropicKey" PlaceholderText="sk-ant-…"/>
+                <TextBlock Text="Chat model" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="AnthropicChatModel" PlaceholderText="claude-3-5-haiku-20241022"/>
+            </StackPanel>
+
+            <!-- ─── Gemini fields ─────────────────────────────────────── -->
+            <StackPanel x:Name="GeminiFields" Spacing="8" Visibility="Collapsed">
+                <TextBlock Text="API Key" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <PasswordBox x:Name="GeminiKey" PlaceholderText="AIza…"/>
+                <TextBlock Text="Chat model" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="GeminiChatModel" PlaceholderText="gemini-2.0-flash"/>
+            </StackPanel>
+
+            <!-- ─── Mistral fields ────────────────────────────────────── -->
+            <StackPanel x:Name="MistralFields" Spacing="8" Visibility="Collapsed">
+                <TextBlock Text="API Key" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <PasswordBox x:Name="MistralKey" PlaceholderText="…"/>
+                <TextBlock Text="Chat model" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="MistralChatModel" PlaceholderText="mistral-small-latest"/>
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+</ContentDialog>

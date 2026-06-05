@@ -1,0 +1,439 @@
+<Window
+    x:Class="OnAirNative.Views.ControllerWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:OnAirNative.Views"
+    xmlns:vm="using:OnAirNative.ViewModels"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="onAIr — Controller">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>   <!-- Tab bar -->
+            <RowDefinition Height="*"/>      <!-- Tab content -->
+            <RowDefinition Height="Auto"/>   <!-- Footer -->
+        </Grid.RowDefinitions>
+
+        <!-- ═══ Tab selector ═══════════════════════════════════════════════ -->
+        <NavigationView
+            x:Name="NavView"
+            Grid.Row="0" Grid.RowSpan="2"
+            PaneDisplayMode="Top"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="False"
+            IsSettingsVisible="False"
+            SelectionChanged="NavView_SelectionChanged">
+
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Script" Tag="script">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8A4;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Q&amp;A" Tag="qa">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE720;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="App Stealth" Tag="stealth">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9E9;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Settings" Tag="settings">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="About" Tag="about">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE946;"/>
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <!-- ── Tab content panels (swap on selection) ─────────────── -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Margin="0,0,0,48">
+              <Grid>
+
+                <!-- ── Scroll Tab ─────────────────────────────────────── -->
+                <StackPanel x:Name="ScrollPanel" Spacing="14" Padding="16">
+
+                    <TextBlock Text="Script file" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="FileNameText"
+                                   Grid.Column="0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   FontSize="13"
+                                   Text="No file loaded"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="1"
+                                Content="Load .txt…"
+                                Click="LoadFile_Click"
+                                Margin="8,0,0,0"/>
+                    </Grid>
+
+                    <TextBlock Text="Scroll mode" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <RadioButton x:Name="ScrollManualRadio" Content="Manual" Tag="Manual" Checked="ScrollModeChanged"/>
+                        <RadioButton x:Name="ScrollAutoRadio"   Content="Auto"   Tag="Auto"   Checked="ScrollModeChanged"/>
+                        <RadioButton x:Name="ScrollVoiceRadio"  Content="Voice"  Tag="Voice"  Checked="ScrollModeChanged"/>
+                    </StackPanel>
+
+                    <!-- Voice mode mic level indicator -->
+                    <Border x:Name="VoiceLevelPanel" Visibility="Collapsed"
+                            Background="#1A1A2E" CornerRadius="6" Padding="10,6">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="🎙" FontSize="14" VerticalAlignment="Center"/>
+                            <ProgressBar x:Name="MicLevelBar"
+                                         Minimum="0" Maximum="30"
+                                         Width="120" Height="8"
+                                         VerticalAlignment="Center"/>
+                            <TextBlock x:Name="MicLevelText"
+                                       FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       VerticalAlignment="Center"
+                                       Text="0.0"/>
+                            <TextBlock FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       VerticalAlignment="Center"
+                                       Text="(adjust threshold in Settings)"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Scroll step (px)" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <Slider x:Name="ScrollStepSlider" ValueChanged="ScrollStepSlider_ValueChanged"/>
+
+                    <TextBlock x:Name="SpeedLabel" Text="Auto-scroll speed"
+                               Style="{ThemeResource CaptionTextBlockStyle}" Visibility="Collapsed"/>
+                    <Slider x:Name="ScrollSpeedSlider" Visibility="Collapsed"
+                            ValueChanged="ScrollSpeedSlider_ValueChanged"/>
+
+                    <TextBlock Text="Font size" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <Slider x:Name="FontSizeSlider" ValueChanged="FontSizeSlider_ValueChanged"/>
+
+                    <TextBlock Text="Overlay opacity" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <Slider x:Name="OpacitySlider" ValueChanged="OpacitySlider_ValueChanged"/>
+
+                    <!-- Font color presets -->
+                    <TextBlock Text="Font color" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="ColorWhite"    Width="32" Height="32" CornerRadius="16" Background="#F0F0F0" Tag="#F0F0F0"   Click="FontColor_Click" ToolTipService.ToolTip="White"/>
+                        <Button x:Name="ColorYellow"   Width="32" Height="32" CornerRadius="16" Background="#FFE066" Tag="#FFE066"   Click="FontColor_Click" ToolTipService.ToolTip="Yellow"/>
+                        <Button x:Name="ColorGreen"    Width="32" Height="32" CornerRadius="16" Background="#90EE90" Tag="#90EE90"   Click="FontColor_Click" ToolTipService.ToolTip="Green"/>
+                        <Button x:Name="ColorCyan"     Width="32" Height="32" CornerRadius="16" Background="#7FFFD4" Tag="#7FFFD4"   Click="FontColor_Click" ToolTipService.ToolTip="Aqua"/>
+                        <Button x:Name="ColorOrange"   Width="32" Height="32" CornerRadius="16" Background="#FFA07A" Tag="#FFA07A"   Click="FontColor_Click" ToolTipService.ToolTip="Orange"/>
+                        <Button x:Name="ColorPink"     Width="32" Height="32" CornerRadius="16" Background="#FFB6C1" Tag="#FFB6C1"   Click="FontColor_Click" ToolTipService.ToolTip="Pink"/>
+                        <TextBlock x:Name="FontColorIndicator" VerticalAlignment="Center"
+                                   FontSize="12"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Text=""/>
+                    </StackPanel>
+
+                    <!-- Save / Reset settings -->
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                        <Button Content="💾 Save settings"
+                                Style="{ThemeResource AccentButtonStyle}"
+                                Click="SaveSettings_Click"/>
+                        <Button Content="↺ Reset defaults"
+                                Click="ResetSettings_Click"/>
+                        <TextBlock x:Name="SaveStatusText"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"
+                                   Foreground="#4A90D9"/>
+                    </StackPanel>
+
+                    <!-- Virtual scroll buttons (touch-friendly) -->
+                    <TextBlock Text="Virtual scroll buttons" Style="{ThemeResource CaptionTextBlockStyle}"
+                               Margin="0,4,0,0"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Content="▲" FontSize="28"
+                                HorizontalAlignment="Stretch" Height="64"
+                                Click="ScrollUp_Click"/>
+                        <Button Grid.Column="1" Content="▼" FontSize="28"
+                                HorizontalAlignment="Stretch" Height="64"
+                                Click="ScrollDown_Click"/>
+                    </Grid>
+                </StackPanel>
+
+                <!-- ── Q&A Tab ─────────────────────────────────────────── -->
+                <StackPanel x:Name="AiPanel" Spacing="12" Padding="16" Visibility="Collapsed">
+
+                    <!-- Record button (moved from overlay) -->
+                    <TextBlock Text="Recording" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <Button x:Name="ControllerRecordBtn"
+                                Content="● Record"
+                                Background="#4A90D9"
+                                Foreground="White"
+                                CornerRadius="20"
+                                Padding="16,8"
+                                Click="ControllerRecordBtn_Click"/>
+                        <TextBlock x:Name="ControllerQaStatus"
+                                   VerticalAlignment="Center"
+                                   FontSize="13"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <TextBlock Text="Chat provider" Style="{ThemeResource CaptionTextBlockStyle}" Margin="0,8,0,0"/>
+                    <ComboBox x:Name="ChatProviderCombo"
+                              HorizontalAlignment="Stretch"
+                              SelectionChanged="ChatProviderCombo_SelectionChanged"/>
+
+                    <TextBlock Text="Transcription provider" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <ComboBox x:Name="TranscriptionCombo"
+                              HorizontalAlignment="Stretch"
+                              SelectionChanged="TranscriptionCombo_SelectionChanged"/>
+
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0"
+                                Content="⚙ Configure provider…"
+                                Click="ConfigureProvider_Click"
+                                HorizontalAlignment="Stretch"/>
+                        <Button Grid.Column="1"
+                                Content="Test"
+                                Margin="8,0,0,0"
+                                Click="TestConnection_Click"/>
+                    </Grid>
+
+                    <TextBlock x:Name="ConnectionStatusText"
+                               Foreground="#4A90D9"
+                               FontSize="13"
+                               Margin="0,2,0,8"
+                               TextWrapping="Wrap"/>
+
+                    <TextBlock Text="System prompt" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <TextBox x:Name="SystemPromptBox"
+                             AcceptsReturn="True"
+                             Height="80"
+                             TextWrapping="Wrap"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             TextChanged="SystemPromptBox_TextChanged"/>
+
+                    <TextBlock Text="Presentation context (injected into every answer)"
+                               Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <TextBox x:Name="PresentationContextBox"
+                             AcceptsReturn="True"
+                             Height="60"
+                             TextWrapping="Wrap"
+                             PlaceholderText="e.g. 'Presenting Azure AI Foundry to Contoso…'"
+                             TextChanged="PresentationContextBox_TextChanged"/>
+
+                    <TextBlock Text="Whisper local model path (optional — blank = cloud API)"
+                               Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="WhisperModelBox"
+                                 Grid.Column="0"
+                                 PlaceholderText="C:\models\ggml-base.en.bin"
+                                 TextChanged="WhisperModelBox_TextChanged"/>
+                        <Button Grid.Column="1"
+                                Content="Browse"
+                                Margin="8,0,0,0"
+                                Click="BrowseWhisperModel_Click"/>
+                    </Grid>
+                </StackPanel>
+
+                <!-- ── Settings Tab ────────────────────────────────────── -->
+                <StackPanel x:Name="SettingsPanel" Spacing="12" Padding="16" Visibility="Collapsed">
+
+                    <TextBlock Text="Audio — Recording source" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <ComboBox x:Name="AudioSourceCombo"
+                              HorizontalAlignment="Stretch"
+                              SelectionChanged="AudioSourceCombo_SelectionChanged">
+                        <ComboBoxItem Content="Microphone" Tag="microphone"/>
+                        <ComboBoxItem Content="System audio (loopback)" Tag="system"/>
+                        <ComboBoxItem Content="Both (mic + system)" Tag="both"/>
+                    </ComboBox>
+
+                    <TextBlock Text="Input device (microphone)" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <ComboBox x:Name="InputDeviceCombo"
+                              HorizontalAlignment="Stretch"
+                              SelectionChanged="InputDeviceCombo_SelectionChanged"
+                              PlaceholderText="Default system microphone"/>
+
+                    <TextBlock Text="Output device" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <ComboBox x:Name="OutputDeviceCombo"
+                              HorizontalAlignment="Stretch"
+                              SelectionChanged="OutputDeviceCombo_SelectionChanged"
+                              PlaceholderText="Default system output"/>
+
+                    <Button Content="↺ Refresh device list"
+                            Margin="0,4,0,0"
+                            Click="RefreshDevices_Click"/>
+
+                    <TextBlock Text="Voice scroll — sensitivity threshold" Style="{ThemeResource CaptionTextBlockStyle}"
+                               Margin="0,8,0,0"/>
+                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextWrapping="Wrap">
+                        Lower = more sensitive (scrolls with quiet speech). Higher = only loud speech triggers scroll.
+                    </TextBlock>
+                    <Slider x:Name="VoiceThresholdSlider"
+                            ValueChanged="VoiceThresholdSlider_ValueChanged"/>
+                    <TextBlock x:Name="VoiceThresholdValue"
+                               FontSize="12"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+
+                <!-- ── App Stealth Tab ─────────────────────────────────── -->
+                <StackPanel x:Name="StealthPanel" Spacing="12" Padding="16" Visibility="Collapsed">
+
+                    <TextBlock Text="Select a window to embed" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               FontSize="12" TextWrapping="Wrap">
+                        Embeds any running app into a stealth container with
+                        WDA_EXCLUDEFROMCAPTURE. The app runs normally inside the container —
+                        you can interact with it — but the client doesn't see it in screen share.
+                        Works best with Win32/WPF apps. Chromium-based apps may vary.
+                    </TextBlock>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <ComboBox x:Name="WindowListCombo"
+                                  Grid.Column="0"
+                                  HorizontalAlignment="Stretch"
+                                  PlaceholderText="Select a window…"
+                                  SelectionChanged="WindowListCombo_SelectionChanged"/>
+                        <Button Grid.Column="1"
+                                Content="↺"
+                                Margin="8,0,0,0"
+                                ToolTipService.ToolTip="Refresh window list"
+                                Click="RefreshWindows_Click"/>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="EmbedBtn"
+                                Content="⊕ Embed in container"
+                                IsEnabled="False"
+                                Style="{ThemeResource AccentButtonStyle}"
+                                Click="EmbedBtn_Click"
+                                ToolTipService.ToolTip="Re-parent the selected window into a stealth container"/>
+                        <Button x:Name="ReleaseEmbedBtn"
+                                Content="⊖ Release"
+                                Visibility="Collapsed"
+                                Click="ReleaseEmbedBtn_Click"/>
+                        <TextBlock x:Name="StealthStatusText"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- ── Browser Tab ────────────────────────────────────── -->
+                <!-- ── About Tab ─────────────────────────────────────── -->
+                <StackPanel x:Name="AboutPanel" Spacing="12" Padding="16" Visibility="Collapsed">
+                    <TextBlock Text="onAIr Native"
+                               FontSize="24" FontWeight="Bold"/>
+                    <TextBlock x:Name="VersionText"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock Text="Transparent teleprompter overlay · WinUI 3 · whisper.net · NAudio"
+                               TextWrapping="Wrap"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock x:Name="AuthorsText" TextWrapping="Wrap"/>
+                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               FontSize="12" TextWrapping="Wrap">
+                        GitHub: github.com/souz4rafael/onair-native (coming soon)
+                    </TextBlock>
+
+                    <TextBlock Text="Keyboard shortcuts" FontWeight="SemiBold" Margin="0,12,0,0"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition/>
+                            <RowDefinition/>
+                            <RowDefinition/>
+                            <RowDefinition/>
+                            <RowDefinition/>
+                            <RowDefinition/>
+                        </Grid.RowDefinitions>
+                        <!-- Row 0 -->
+                        <TextBlock Grid.Row="0" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+PgUp"/>
+                        <TextBlock Grid.Row="0" Grid.Column="2" FontSize="12" Text="Scroll script up (manual mode)" TextWrapping="Wrap"/>
+                        <!-- Row 1 -->
+                        <TextBlock Grid.Row="1" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+PgDn"/>
+                        <TextBlock Grid.Row="1" Grid.Column="2" FontSize="12" Text="Scroll script down (manual mode)" TextWrapping="Wrap"/>
+                        <!-- Row 2 -->
+                        <TextBlock Grid.Row="2" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+Home"/>
+                        <TextBlock Grid.Row="2" Grid.Column="2" FontSize="12" Text="Toggle overlay locked / unlocked" TextWrapping="Wrap"/>
+                        <!-- Row 3 -->
+                        <TextBlock Grid.Row="3" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+R"/>
+                        <TextBlock Grid.Row="3" Grid.Column="2" FontSize="12" Text="Start / stop Q&amp;A recording" TextWrapping="Wrap"/>
+                        <!-- Row 4 -->
+                        <TextBlock Grid.Row="4" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+M"/>
+                        <TextBlock Grid.Row="4" Grid.Column="2" FontSize="12" Text="Switch mode: Script → Q&amp;A → Browser" TextWrapping="Wrap"/>
+                        <!-- Row 5 -->
+                        <TextBlock Grid.Row="5" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+O"/>
+                        <TextBlock Grid.Row="5" Grid.Column="2" FontSize="12" Text="Open script file picker" TextWrapping="Wrap"/>
+                    </Grid>
+                </StackPanel>
+              </Grid>
+            </ScrollViewer>
+        </NavigationView>
+
+        <!-- ═══ Footer ══════════════════════════════════════════════════════ -->
+        <Border Grid.Row="2"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="8,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Overlay visibility toggle -->
+                <ToggleButton Grid.Column="0"
+                              x:Name="OverlayToggle"
+                              FontSize="12"
+                              Checked="OverlayToggle_Checked"
+                              Unchecked="OverlayToggle_Unchecked"/>
+
+                <!-- Overlay lock/unlock toggle -->
+                <ToggleButton Grid.Column="2"
+                              x:Name="LockToggle"
+                              FontSize="12"
+                              Checked="LockToggle_Checked"
+                              Unchecked="LockToggle_Unchecked"/>
+
+                <!-- Controller screen-share protection -->
+                <ToggleButton Grid.Column="4"
+                              x:Name="ProtectToggle"
+                              Content="🙈 Hide from capture"
+                              FontSize="12"
+                              Checked="ProtectToggle_Checked"
+                              Unchecked="ProtectToggle_Unchecked"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

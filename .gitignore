@@ -1,0 +1,47 @@
+## Visual Studio / MSBuild
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+!**/packages/build/
+*.lock.json
+!packages.lock.json
+
+## Publish
+[Pp]ublish/
+PublishProfiles/
+dist/
+
+## OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## Secrets / keys – never commit these
+secrets.json
+local.settings.json
+
+## Whisper model files (large binaries – download separately)
+*.bin
+*.gguf
+*.ggml
+models/
+
+## NAudio temp
+*.wav
+*.webm
+
+## Rider
+.idea/
+*.sln.iml
