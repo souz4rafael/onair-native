@@ -20,7 +20,6 @@ public sealed partial class OverlayWindow : Window
     public ControllerWindow? Controller  { get; set; }
 
     private IntPtr     _hwnd;
-    private WebView2?  _webView;
 
     public OverlayWindow()
     {
