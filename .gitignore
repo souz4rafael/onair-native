@@ -33,10 +33,12 @@ secrets.json
 local.settings.json
 
 ## Whisper model files (large binaries – download separately)
+## NOTE: do NOT add a bare "models/" rule here — on case-insensitive
+## filesystems it also ignores the OnAirNative/Models/ source folder.
+## The extension rules below already cover the downloaded model binaries.
 *.bin
 *.gguf
 *.ggml
-models/
 
 ## NAudio temp
 *.wav
