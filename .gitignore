@@ -26,6 +26,9 @@ dist/
 ## Installer build output (the .exe ships via GitHub Releases, not the repo)
 installer/*.exe
 
+## Bundled redistributables (large; fetched at build time, ship inside the setup)
+installer/redist/
+
 ## OS
 .DS_Store
 Thumbs.db

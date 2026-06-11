@@ -19,6 +19,14 @@
     <LangVersion>preview</LangVersion>
     <!-- Suppress the auto-generated XAML break-on-exception which fires in debug -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_BREAK_ON_UNHANDLED_EXCEPTION</DefineConstants>
+
+    <!--
+      Normalize source paths embedded in the binary/PDB so crash stack traces
+      don't leak the build machine's username and folder layout. Real paths
+      (C:\Users\...\OnAirNative\) become /src\... in shipped stack traces.
+    -->
+    <DeterministicSourcePaths>true</DeterministicSourcePaths>
+    <PathMap>$(MSBuildProjectDirectory)=/src</PathMap>
   </PropertyGroup>
 
   <ItemGroup>
@@ -71,6 +79,21 @@
     </ItemGroup>
     <Copy SourceFiles="@(_VCRuntimeFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(_VCRuntimeFiles)' != ''" />
     <Copy SourceFiles="@(_VCRuntimeFiles)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="'$(PublishDir)' != '' and '@(_VCRuntimeFiles)' != ''" />
+  </Target>
+
+  <!--
+    Deploy the compiled XAML resource index (OnAirNative.pri) to the publish
+    folder. `dotnet publish` to a custom output directory does NOT copy the
+    PRI file, so at runtime LoadComponent cannot find the compiled .xbf XAML
+    and every Window() throws XamlParseException — the app installs fine but
+    exits silently / crashes on launch. Copy the build-produced PRI into the
+    publish output to fix this.
+  -->
+  <Target Name="CopyPriToPublish" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
+    <Copy SourceFiles="$(OutDir)$(AssemblyName).pri"
+          DestinationFolder="$(PublishDir)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(OutDir)$(AssemblyName).pri')" />
   </Target>
 
 </Project>

@@ -9,7 +9,7 @@ SetCompressor /SOLID lzma
 ;  Product metadata
 ;-------------------------------------------------------------
 !define PRODUCT_NAME        "onAIr Native"
-!define PRODUCT_VERSION     "1.0.2"
+!define PRODUCT_VERSION     "1.0.3"
 !define PRODUCT_PUBLISHER   "Rafael Souza"
 !define PRODUCT_WEB_SITE    "https://github.com/souz4rafael/onair-native"
 !define PRODUCT_EXE         "OnAirNative.exe"
@@ -74,6 +74,20 @@ Section "onAIr Native (required)" SEC_MAIN
 
   ; Copy the entire self-contained publish output (recursively)
   File /r "${PUBLISH_DIR}\*.*"
+
+  ; ── Windows App Runtime ───────────────────────────────────────────────
+  ; The app is published framework-dependent against the Windows App SDK,
+  ; so the runtime must be present. On a clean machine its absence causes a
+  ; XamlParseException on the first Window() and the app exits silently.
+  ; Bundle the official Microsoft redistributable and install it quietly.
+  DetailPrint "Installing Windows App Runtime (required)..."
+  SetOutPath "$INSTDIR"
+  File "redist\WindowsAppRuntimeInstall-x64.exe"
+  nsExec::ExecToLog '"$INSTDIR\WindowsAppRuntimeInstall-x64.exe" --quiet --force'
+  Pop $0
+  DetailPrint "Windows App Runtime installer exit code: $0"
+  ; Clean up the bundled installer after running it
+  Delete "$INSTDIR\WindowsAppRuntimeInstall-x64.exe"
 
   ; Start Menu + Desktop shortcuts
   CreateDirectory "$SMPROGRAMS\onAIr Native"
