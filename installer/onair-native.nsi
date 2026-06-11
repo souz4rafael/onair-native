@@ -9,7 +9,7 @@ SetCompressor /SOLID lzma
 ;  Product metadata
 ;-------------------------------------------------------------
 !define PRODUCT_NAME        "onAIr Native"
-!define PRODUCT_VERSION     "1.0.1"
+!define PRODUCT_VERSION     "1.0.2"
 !define PRODUCT_PUBLISHER   "Rafael Souza"
 !define PRODUCT_WEB_SITE    "https://github.com/souz4rafael/onair-native"
 !define PRODUCT_EXE         "OnAirNative.exe"

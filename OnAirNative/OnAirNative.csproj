@@ -47,6 +47,30 @@
     <!-- Run: dotnet add package Whisper.net && dotnet add package Whisper.net.Runtime -->
     <PackageReference Include="Whisper.net" Version="1.7.3" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.7.3" />
+
+    <!-- DPAPI secret-at-rest encryption for API keys (ProtectedData) -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
+
+  <!--
+    Visual C++ Runtime — app-local deployment.
+    WinUI 3 / Windows App SDK self-contained does NOT bundle the VC++ Runtime,
+    so on a clean machine without the VC++ Redistributable the native WinUI
+    components fail to load and the app exits silently with no error.
+    Copying these redistributable DLLs next to the exe makes the app truly
+    self-contained. Source: the VC Tools redist dir when a VS build env is
+    present, otherwise the system copy.
+  -->
+  <Target Name="CopyVCRuntime" AfterTargets="Build;Publish">
+    <PropertyGroup>
+      <_VCRedistX64>$(VCToolsRedistDir)x64\Microsoft.VC143.CRT\</_VCRedistX64>
+    </PropertyGroup>
+    <ItemGroup>
+      <_VCRuntimeFiles Condition="Exists('$(_VCRedistX64)')" Include="$(_VCRedistX64)vcruntime140.dll;$(_VCRedistX64)vcruntime140_1.dll;$(_VCRedistX64)msvcp140.dll" />
+      <_VCRuntimeFiles Condition="!Exists('$(_VCRedistX64)')" Include="$(WINDIR)\System32\vcruntime140.dll;$(WINDIR)\System32\vcruntime140_1.dll;$(WINDIR)\System32\msvcp140.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_VCRuntimeFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(_VCRuntimeFiles)' != ''" />
+    <Copy SourceFiles="@(_VCRuntimeFiles)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="'$(PublishDir)' != '' and '@(_VCRuntimeFiles)' != ''" />
+  </Target>
 
 </Project>
