@@ -30,7 +30,6 @@ public sealed partial class OverlayWindow : Window
 
         // Wire ViewModel events → Win32 calls
         ViewModel.ClickThroughChanged += OnClickThroughChanged;
-        // Browser navigation is handled by BrowserWindow (via App.xaml.cs)
         ViewModel.PropertyChanged            += (_, e) =>
         {
             switch (e.PropertyName)
@@ -148,9 +147,8 @@ public sealed partial class OverlayWindow : Window
         }
     }
 
-    // ── WebView2 removed from overlay — browser uses separate BrowserWindow ──────
-    // (WebView2 cannot render in WS_EX_LAYERED windows, which the overlay uses
-    // for transparency. See BrowserWindow.xaml.cs for the implementation.)
+    // Note: the overlay cannot host a WebView2 — WebView2 does not render inside
+    // WS_EX_LAYERED windows, which is what makes the overlay transparent.
 
     // ── Click-through / Move mode ─────────────────────────────────────────────
 

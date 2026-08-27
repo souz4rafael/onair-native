@@ -7,6 +7,9 @@ namespace OnAirNative;
 
 public partial class App : Application
 {
+    // Set in the constructor so Program.cs can route redirected activations here.
+    public static App Instance { get; private set; } = null!;
+
     // Singleton services — consumed by ViewModels and Views
     public static ConfigService     Config     { get; private set; } = null!;
     public static AudioService      Audio      { get; private set; } = null!;
@@ -17,9 +20,11 @@ public partial class App : Application
 
     private OverlayWindow?    _overlay;
     private ControllerWindow? _controller;
+    private Microsoft.UI.Dispatching.DispatcherQueue? _uiQueue;
 
     public App()
     {
+        Instance = this;
         InitializeComponent();
     }
 
@@ -82,7 +87,8 @@ public partial class App : Application
         // InitViewModel is called from ControllerWindow.OnFirstActivated (after _hwnd is valid)
 
         // Global hotkeys — start after windows are created so HWNDs are valid
-        Hotkeys = new HotkeyService(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
+        _uiQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        Hotkeys = new HotkeyService(_uiQueue);
         Hotkeys.HotkeyTriggered += OnHotkeyTriggered;
         Hotkeys.Start();
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} HotkeyService started\n");
@@ -93,7 +99,7 @@ public partial class App : Application
         Tray.ShowOverlayClicked   += (_, _) => { WindowService.ShowWindow(_overlay!); _controller?.SyncOverlayToggle(true); };
         Tray.HideOverlayClicked   += (_, _) => { WindowService.HideWindow(_overlay!); _controller?.SyncOverlayToggle(false); };
         Tray.LoadScriptClicked    += (_, _) => _ = _overlay?.ViewModel.OpenFilePickerAsync(_overlay!);
-        Tray.ShowControllerClicked += (_, _) => _controller?.Activate();
+        Tray.ShowControllerClicked += (_, _) => { if (_controller is not null) WindowService.BringToFront(_controller); };
         Tray.QuitClicked          += (_, _) => _controller?.Close();
         Tray.Start();
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} TrayService started\n");
@@ -140,9 +146,23 @@ public partial class App : Application
                 _overlay?.ViewModel.CycleMode();
                 break;
             case HotkeyAction.OpenController:
-                _controller?.Activate();
+                if (_controller is not null) WindowService.BringToFront(_controller);
                 break;
         }
+    }
+
+    // Called on the PRIMARY instance (via Program.OnActivated) when a second
+    // launch is redirected here. Bring the Controller forward and, if a .txt was
+    // opened, load it — all marshalled onto the UI thread.
+    public void OnRedirectedActivation(AppActivationArguments args)
+    {
+        var queue = _uiQueue;
+        if (queue is null) { HandleActivation(args); return; }
+        queue.TryEnqueue(() =>
+        {
+            if (_controller is not null) WindowService.BringToFront(_controller);
+            HandleActivation(args);
+        });
     }
 
     private void HandleActivation(AppActivationArguments args)

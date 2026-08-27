@@ -13,7 +13,7 @@ Load a presentation script, keep it floating above your screen share, and use AI
 | Feature | Electron v1.3 | onAIr Native |
 |---|---|---|
 | Transcription | Whisper via cloud API subprocess | **whisper.net in-process** (~10× faster) |
-| Audio capture | WebView2 sandbox (unreliable loopback) | **NAudio WASAPI** (mic + system audio) |
+| Audio capture | WebView2 sandbox (unreliable loopback) | **NAudio WASAPI** (true mic + system-audio mix) |
 | Global hotkeys | electron-globalShortcut (occasionally fails) | **Win32 RegisterHotKey** (bulletproof) |
 | Content protection | Electron setContentProtection | **Win32 SetWindowDisplayAffinity** |
 | App Stealth | — | **Embed any Win32 app** in a stealth container |
@@ -74,6 +74,8 @@ _Choose your audio input device (for recording and voice scroll), configure the 
 
 ### Q&A mode
 - **Record** from the Controller's Q&A tab (or `Ctrl+Alt+R`)
+- **Three capture sources** — microphone only, system audio only (WASAPI loopback), or **both mixed**
+  into a single 16 kHz mono track (exactly the format Whisper wants, so nothing is resampled twice)
 - **Whisper transcription** — in-process via `whisper.net` (fast, no subprocess) or cloud API
 - **AI answer** — sent to your chosen LLM; displayed in the overlay
 - **6 chat providers** — Azure OpenAI · OpenAI · Groq · Anthropic Claude · Google Gemini · Mistral
@@ -84,8 +86,9 @@ _Choose your audio input device (for recording and voice scroll), configure the 
 - **Script tab**: file picker, scroll mode, sliders, font color, save/reset settings, virtual ▲▼ buttons
 - **Q&A tab**: record button, status, provider selection, credential config, system prompt, Whisper model
 - **App Stealth tab**: embed any Win32 window in a stealth container
-- **Settings tab**: audio device selection, voice scroll sensitivity, threshold visualiser
+- **Settings tab**: audio device + capture source selection, voice scroll sensitivity, threshold visualiser
 - **About tab**: version, hotkey reference, GitHub link
+- **Single instance**: launching the app again just brings the existing Controller forward
 - **Footer**: `👁 Overlay: visible/hidden` · `🔒 Overlay: locked/unlocked` · `🙈 Hide from capture`
 
 ### App Stealth container
@@ -163,6 +166,10 @@ Leave blank to use the cloud API.
 Settings are saved to `%LocalAppData%\onAIr Native\config.json`.  
 Format is compatible with the Electron app's `config.json` — you can copy credentials across.
 
+API keys are encrypted at rest with **Windows DPAPI** (`CurrentUser` scope) before being written to
+disk, so a stolen `config.json` is useless on another machine or under another user account.
+Plain-text keys from an older config are migrated automatically on first save.
+
 ---
 
 ## Keyboard shortcuts
@@ -177,6 +184,7 @@ All shortcuts are **global** — they work even when Teams, PowerPoint or Edge h
 | `Ctrl+Alt+R` | Start / stop Q&A recording |
 | `Ctrl+Alt+M` | Cycle overlay mode (Script ↔ Q&A) |
 | `Ctrl+Alt+O` | Open script file picker |
+| `Ctrl+Alt+,` | Bring the Controller window to the front |
 
 ---
 
@@ -187,15 +195,19 @@ onair-native/
 ├── OnAirNative.sln
 └── OnAirNative/
     ├── OnAirNative.csproj          WinUI 3, unpackaged, x64, net8.0-windows10.0.19041.0
-    ├── App.xaml / App.xaml.cs      Entry point, service wiring, hotkey dispatch
+    ├── Program.cs                  Custom Main — single-instance guard + activation redirect
+    ├── App.xaml / App.xaml.cs      Service wiring, hotkey dispatch, window lifetime
+    ├── GlobalUsings.cs             Shared implicit usings
     ├── Win32/NativeMethods.cs      P/Invoke (SetWindowDisplayAffinity, RegisterHotKey,
     │                               EnumWindows, SetParent, Shell_NotifyIcon, …)
     ├── Models/AppConfig.cs         Root config model (6 providers + appearance + window state)
+    ├── Helpers/Converters.cs       XAML value converters
     ├── Services/
     │   ├── ConfigService.cs        JSON persistence to %LocalAppData%
-    │   ├── WindowService.cs        Win32 transparency / click-through / always-on-top
+    │   ├── SecretProtector.cs      DPAPI encryption for API keys at rest
+    │   ├── WindowService.cs        Win32 transparency / click-through / always-on-top / focus
     │   ├── HotkeyService.cs        RegisterHotKey on background thread + message loop
-    │   ├── AudioService.cs         NAudio WASAPI mic + loopback, RMS voice monitor
+    │   ├── AudioService.cs         NAudio WASAPI mic + loopback mixdown, RMS voice monitor
     │   ├── WhisperService.cs       whisper.net in-process + cloud API fallback
     │   ├── AiChatService.cs        6 AI providers via HttpClient
     │   ├── TrayService.cs          Shell_NotifyIcon system tray + context menu

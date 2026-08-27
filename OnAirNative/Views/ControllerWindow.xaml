@@ -343,7 +343,6 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- ── Browser Tab ────────────────────────────────────── -->
                 <!-- ── About Tab ─────────────────────────────────────── -->
                 <StackPanel x:Name="AboutPanel" Spacing="12" Padding="16" Visibility="Collapsed">
                     <TextBlock Text="onAIr Native"
@@ -375,6 +374,7 @@
                             <RowDefinition/>
                             <RowDefinition/>
                             <RowDefinition/>
+                            <RowDefinition/>
                         </Grid.RowDefinitions>
                         <!-- Row 0 -->
                         <TextBlock Grid.Row="0" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+PgUp"/>
@@ -390,10 +390,13 @@
                         <TextBlock Grid.Row="3" Grid.Column="2" FontSize="12" Text="Start / stop Q&amp;A recording" TextWrapping="Wrap"/>
                         <!-- Row 4 -->
                         <TextBlock Grid.Row="4" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+M"/>
-                        <TextBlock Grid.Row="4" Grid.Column="2" FontSize="12" Text="Switch mode: Script → Q&amp;A → Browser" TextWrapping="Wrap"/>
+                        <TextBlock Grid.Row="4" Grid.Column="2" FontSize="12" Text="Switch mode: Script ↔ Q&amp;A" TextWrapping="Wrap"/>
                         <!-- Row 5 -->
                         <TextBlock Grid.Row="5" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+O"/>
                         <TextBlock Grid.Row="5" Grid.Column="2" FontSize="12" Text="Open script file picker" TextWrapping="Wrap"/>
+                        <!-- Row 6 -->
+                        <TextBlock Grid.Row="6" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+,"/>
+                        <TextBlock Grid.Row="6" Grid.Column="2" FontSize="12" Text="Bring the Controller to the front" TextWrapping="Wrap"/>
                     </Grid>
                 </StackPanel>
               </Grid>

@@ -10,7 +10,8 @@ namespace OnAirNative.Views;
 
 /// <summary>
 /// Controller window — the presenter's control panel.
-/// Contains 4 tabs (Scroll, AI, Browser, About) plus a screen-share protection toggle.
+/// Contains 5 tabs (Script, Q&amp;A, App Stealth, Settings, About) plus the footer
+/// overlay/visibility and screen-share protection toggles.
 /// </summary>
 public sealed partial class ControllerWindow : Window
 {

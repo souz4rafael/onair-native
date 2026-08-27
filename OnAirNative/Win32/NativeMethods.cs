@@ -67,6 +67,7 @@ internal static partial class NativeMethods
     internal const uint WS_EX_APPWINDOW = 0x00040000;
 
     internal const int  SW_SHOW    = 5;
+    internal const int  SW_RESTORE = 9;
     internal const uint WM_SIZE    = 0x0005;
     internal const uint WM_CLOSE   = 0x0010;
     internal const uint WM_DESTROY = 0x0002;
@@ -90,6 +91,10 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll", EntryPoint = "ShowWindow")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [LibraryImport("user32.dll", EntryPoint = "IsIconic")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool IsIconic(IntPtr hWnd);
 
     // ── EnumWindows — window discovery ────────────────────────────────────────
 
@@ -244,6 +249,7 @@ internal static partial class NativeMethods
     internal const uint VK_M      = 0x4D;
     internal const uint VK_O      = 0x4F;
     internal const uint VK_R      = 0x52;
+    internal const uint VK_OEM_COMMA = 0xBC;  // ',' on a US layout
 
     // ── SetWindowDisplayAffinity ──────────────────────────────────────────────
 

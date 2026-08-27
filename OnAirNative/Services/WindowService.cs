@@ -25,6 +25,25 @@ public static partial class WindowService
     public static void HideWindow(Window window) => window.AppWindow.Hide();
     public static bool IsVisible(Window window)  => window.AppWindow.IsVisible;
 
+    /// <summary>
+    /// Shows, un-minimises and focuses a window. <see cref="Window.Activate"/> alone
+    /// does not restore a minimised window nor reliably steal focus from another app,
+    /// which is what a global hotkey needs to do.
+    /// </summary>
+    public static void BringToFront(Window window)
+    {
+        try
+        {
+            window.AppWindow.Show(activateWindow: true);
+            var hwnd = GetHwnd(window);
+            if (NativeMethods.IsIconic(hwnd))
+                NativeMethods.ShowWindow(hwnd, NativeMethods.SW_RESTORE);
+            window.Activate();
+            NativeMethods.SetForegroundWindow(hwnd);
+        }
+        catch { /* window may already be closing */ }
+    }
+
     // ── Transparency & frame ─────────────────────────────────────────────────
 
     /// <summary>

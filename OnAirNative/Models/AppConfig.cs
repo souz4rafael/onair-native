@@ -97,16 +97,6 @@ public class AppConfig
 
     public string PresentationContext { get; set; } = "";
 
-    // Browser quick links (max 10)
-    public List<QuickLink> QuickLinks { get; set; } =
-    [
-        new("🔍 Google",        "https://www.google.com"),
-        new("🔎 Bing",          "https://www.bing.com"),
-        new("📊 Google Slides", "https://slides.google.com"),
-        new("☁️ OneDrive",      "https://onedrive.live.com"),
-        new("📖 Wikipedia",     "https://www.wikipedia.org"),
-    ];
-
     // UI / appearance
     public AppearanceConfig Appearance { get; set; } = new();
 

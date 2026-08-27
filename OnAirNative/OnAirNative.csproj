@@ -17,8 +17,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>preview</LangVersion>
-    <!-- Suppress the auto-generated XAML break-on-exception which fires in debug -->
-    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_BREAK_ON_UNHANDLED_EXCEPTION</DefineConstants>
+    <!-- Suppress the auto-generated XAML break-on-exception which fires in debug.
+         DISABLE_XAML_GENERATED_MAIN: we provide our own Main (Program.cs) so we
+         can do single-instance redirection before the app starts. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_BREAK_ON_UNHANDLED_EXCEPTION;DISABLE_XAML_GENERATED_MAIN</DefineConstants>
 
     <!--
       Normalize source paths embedded in the binary/PDB so crash stack traces

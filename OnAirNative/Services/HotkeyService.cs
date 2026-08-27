@@ -27,7 +27,7 @@ public enum HotkeyAction
 ///   Ctrl+Alt+O     → OpenFile
 ///   Ctrl+Alt+R     → ToggleRecording
 ///   Ctrl+Alt+M     → SwitchMode
-///   Ctrl+Alt+,     → OpenController  (not yet mapped — see TODO below)
+///   Ctrl+Alt+,     → OpenController
 /// </summary>
 public sealed class HotkeyService : IDisposable
 {
@@ -96,6 +96,7 @@ public sealed class HotkeyService : IDisposable
             Register(ID_OPEN_FILE,   NativeMethods.VK_O);
             Register(ID_RECORD,      NativeMethods.VK_R);
             Register(ID_SWITCH_MODE, NativeMethods.VK_M);
+            Register(ID_CONTROLLER,  NativeMethods.VK_OEM_COMMA);
 
             // Pump messages until WM_QUIT
             while (NativeMethods.GetMessage(out var msg, IntPtr.Zero, 0, 0))

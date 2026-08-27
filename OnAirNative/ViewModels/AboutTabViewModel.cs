@@ -6,9 +6,9 @@ namespace OnAirNative.ViewModels;
 public partial class AboutTabViewModel : ObservableObject
 {
     public string AppName    => "onAIr Native";
-    public string Version    => "1.0.3";
+    public string Version    => "1.0.4";
     public string Authors    => "Rafael Souza (Microsoft) · GitHub Copilot (Claude Sonnet 4.6)";
-    public string SourceUrl  => "https://github.com/souz4rafael/onair";
+    public string SourceUrl  => "https://github.com/souz4rafael/onair-native";
     public string BaseApp    => "Based on onAIr v1.3.0 (Electron)";
     public string Description =>
         "Transparent always-on-top teleprompter overlay for Windows.\n" +

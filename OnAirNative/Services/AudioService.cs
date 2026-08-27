@@ -1,11 +1,14 @@
+using System.Diagnostics;
 using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 using NAudio.CoreAudioApi;
 
 namespace OnAirNative.Services;
 
 /// <summary>
 /// Manages audio capture via WASAPI.
-/// Supports microphone (WasapiCapture) and system-audio loopback (WasapiLoopbackCapture).
+/// Supports microphone (WasapiCapture), system-audio loopback (WasapiLoopbackCapture)
+/// and a real-time mix of both.
 /// Captured audio is buffered in memory and returned as a WAV byte array.
 /// Also provides a lightweight voice-monitor mode for voice-activated scroll (RMS callback).
 /// </summary>
@@ -43,28 +46,40 @@ public sealed class AudioService : IDisposable
 
     // ── Recording state ───────────────────────────────────────────────────────
 
+    // Whisper expects 16 kHz mono; the mixer renders straight to that format so no
+    // downstream resampling is needed.
+    private const int MixSampleRate = 16000;
+
+    // Summing two live sources can clip. Attenuate each leg before mixing.
+    private const float MixLegGain = 0.8f;
+
     private IWaveIn?      _capture;
+    private IWaveIn?      _loopbackCapture;   // second leg, only used by source = "both"
     private MemoryStream? _buffer;
     private WaveFileWriter? _writer;
     private bool          _recording;
 
+    private CancellationTokenSource? _mixPumpCts;
+    private Task?                    _mixPumpTask;
+
     public bool IsRecording => _recording;
 
-    /// <param name="source">"microphone" | "system" | "both" (both = mic only for now, loopback mix TODO)</param>
+    /// <param name="source">"microphone" | "system" | "both" (mic + system audio mixed)</param>
     public Task StartRecordingAsync(string source = "microphone", string? deviceId = null)
     {
         if (_recording) return Task.CompletedTask;
 
         StopVoiceMonitor();
 
-        if (source == "system")
+        if (source == "both")
         {
-            _capture = new WasapiLoopbackCapture();
+            StartMixedRecording(deviceId);
+            return Task.CompletedTask;
         }
-        else
-        {
-            _capture = CreateCapture(deviceId);
-        }
+
+        _capture = source == "system"
+            ? new WasapiLoopbackCapture()
+            : CreateCapture(deviceId);
 
         _buffer = new MemoryStream();
         _writer = new WaveFileWriter(_buffer, _capture.WaveFormat);
@@ -82,6 +97,121 @@ public sealed class AudioService : IDisposable
         return Task.CompletedTask;
     }
 
+    // ── Mixed capture (mic + system loopback) ─────────────────────────────────
+
+    /// <summary>
+    /// Captures the microphone and the system loopback simultaneously and mixes them
+    /// into a single 16 kHz mono 16-bit PCM stream.
+    ///
+    /// Each capture feeds a <see cref="BufferedWaveProvider"/>; both are downmixed to
+    /// mono, resampled to 16 kHz and summed by a <see cref="MixingSampleProvider"/>.
+    /// A background pump drains the mixer at real-time pace — WASAPI loopback delivers
+    /// no buffers while nothing is playing, so we cannot pace off buffered bytes;
+    /// <c>ReadFully</c> pads the silent leg with zeros instead of stalling the mix.
+    /// </summary>
+    private void StartMixedRecording(string? deviceId)
+    {
+        _capture         = CreateCapture(deviceId);
+        _loopbackCapture = new WasapiLoopbackCapture();
+
+        var micBuffer  = CreateLegBuffer(_capture.WaveFormat);
+        var loopBuffer = CreateLegBuffer(_loopbackCapture.WaveFormat);
+
+        var mixer = new MixingSampleProvider(
+            WaveFormat.CreateIeeeFloatWaveFormat(MixSampleRate, 1))
+        {
+            // Keep producing samples even when one leg has no data queued
+            ReadFully = true,
+        };
+        mixer.AddMixerInput(ToMixFormat(micBuffer));
+        mixer.AddMixerInput(ToMixFormat(loopBuffer));
+
+        var pcm = new SampleToWaveProvider16(mixer);
+
+        _buffer = new MemoryStream();
+        _writer = new WaveFileWriter(_buffer, pcm.WaveFormat);
+
+        _capture.DataAvailable += (_, e) =>
+        {
+            if (e.BytesRecorded > 0) micBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+        };
+        _loopbackCapture.DataAvailable += (_, e) =>
+        {
+            if (e.BytesRecorded > 0) loopBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+        };
+
+        _recording = true;
+        _capture.StartRecording();
+        _loopbackCapture.StartRecording();
+
+        _mixPumpCts  = new CancellationTokenSource();
+        _mixPumpTask = Task.Run(() => PumpMixer(pcm, _mixPumpCts.Token));
+    }
+
+    private static BufferedWaveProvider CreateLegBuffer(WaveFormat format) => new(format)
+    {
+        BufferDuration        = TimeSpan.FromSeconds(10),
+        DiscardOnBufferOverflow = true,
+    };
+
+    /// <summary>Downmixes to mono and resamples to <see cref="MixSampleRate"/>.</summary>
+    private static ISampleProvider ToMixFormat(BufferedWaveProvider source)
+    {
+        ISampleProvider sp = source.ToSampleProvider();
+
+        if (sp.WaveFormat.Channels == 2)
+            sp = new StereoToMonoSampleProvider(sp) { LeftVolume = 0.5f, RightVolume = 0.5f };
+        else if (sp.WaveFormat.Channels > 2)
+            sp = new MultiplexingSampleProvider([sp], 1);
+
+        if (sp.WaveFormat.SampleRate != MixSampleRate)
+            sp = new WdlResamplingSampleProvider(sp, MixSampleRate);
+
+        return new VolumeSampleProvider(sp) { Volume = MixLegGain };
+    }
+
+    /// <summary>
+    /// Drains the mixer at wall-clock pace and writes the result to the WAV writer.
+    /// Reading faster than real time would burn through the buffers and pad the take
+    /// with silence, so the amount read is derived from elapsed time.
+    /// </summary>
+    private void PumpMixer(IWaveProvider pcm, CancellationToken token)
+    {
+        var bytesPerSecond = pcm.WaveFormat.AverageBytesPerSecond;
+        var block          = pcm.WaveFormat.BlockAlign;
+        var chunk          = new byte[bytesPerSecond / 5]; // 200 ms
+        var clock          = Stopwatch.StartNew();
+        long written       = 0;
+
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                long target = (long)(clock.Elapsed.TotalSeconds * bytesPerSecond);
+                target -= target % block;
+
+                while (written < target && !token.IsCancellationRequested)
+                {
+                    int want = (int)Math.Min(chunk.Length, target - written);
+                    want -= want % block;
+                    if (want <= 0) break;
+
+                    int read = pcm.Read(chunk, 0, want);
+                    if (read <= 0) break;
+
+                    _writer?.Write(chunk, 0, read);
+                    written += read;
+                }
+
+                Thread.Sleep(50);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Audio] Mix pump stopped: {ex.Message}");
+        }
+    }
+
     /// <summary>
     /// Stops recording and returns the captured audio as a WAV byte array.
     /// Returns an empty array if nothing was recorded.
@@ -91,10 +221,18 @@ public sealed class AudioService : IDisposable
         if (!_recording || _capture is null) return [];
 
         _capture.StopRecording();
+        _loopbackCapture?.StopRecording();
         _recording = false;
 
         // Give the device a moment to flush the last buffer
         await Task.Delay(150);
+
+        // Let the mix pump drain what the captures just flushed, then stop it
+        if (_mixPumpCts is not null)
+        {
+            _mixPumpCts.Cancel();
+            try { if (_mixPumpTask is not null) await _mixPumpTask; } catch { /* pump is best-effort */ }
+        }
 
         _writer?.Flush();
         var data = _buffer?.ToArray() ?? [];
@@ -105,12 +243,18 @@ public sealed class AudioService : IDisposable
 
     private void CleanupCapture()
     {
+        _mixPumpCts?.Dispose();
+        _mixPumpCts  = null;
+        _mixPumpTask = null;
+
         _writer?.Dispose();
         _capture?.Dispose();
+        _loopbackCapture?.Dispose();
         _buffer?.Dispose();
-        _writer  = null;
-        _capture = null;
-        _buffer  = null;
+        _writer          = null;
+        _capture         = null;
+        _loopbackCapture = null;
+        _buffer          = null;
     }
 
     // ── Voice monitor (RMS-based, for voice-activated scroll) ─────────────────
@@ -200,8 +344,11 @@ public sealed class AudioService : IDisposable
         if (_recording)
         {
             _capture?.StopRecording();
+            _loopbackCapture?.StopRecording();
             _recording = false;
         }
+        _mixPumpCts?.Cancel();
+        try { _mixPumpTask?.Wait(500); } catch { /* pump is best-effort */ }
         CleanupCapture();
         StopVoiceMonitor();
     }
