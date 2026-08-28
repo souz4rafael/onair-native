@@ -1,13 +1,10 @@
-# onAIr Native Assets
+# onAIr Assets
 
 Place the following files in this folder:
 
 - `app-icon.ico`  — Application icon (used by installer + taskbar)
 - `app-icon.png`  — 256×256 PNG version (used by tray)
 - `tray-icon.png` — 16×16 or 32×32 PNG for system tray
-
-You can export these from the original Electron app:
-  `github.com/souz4rafael/onair/tree/master/assets`
 
 ## Whisper Models
 

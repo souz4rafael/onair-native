@@ -51,6 +51,7 @@ public class AppearanceConfig
     public string FontColor         { get; set; } = "#f0f0f0";
     public int    ScrollStep        { get; set; } = 120;
     public int    ScrollSpeed       { get; set; } = 50;
+    public int    VoiceScrollSpeed  { get; set; } = 50;   // independent from ScrollSpeed (Auto mode)
     public double VoiceRmsThreshold { get; set; } = 5.0;  // lowered from 15 — easier to trigger
 }
 
@@ -100,9 +101,12 @@ public class AppConfig
     // UI / appearance
     public AppearanceConfig Appearance { get; set; } = new();
 
+    /// <summary>Controller window color theme: "System" | "Light" | "Dark".</summary>
+    public string Theme { get; set; } = "System";
+
     // Persisted window positions
     public WindowState OverlayWindow     { get; set; } = new() { X = 80,  Y = 40,  Width = 720, Height = 300 };
-    public WindowState ControllerWindow  { get; set; } = new() { X = 50,  Y = 80,  Width = 520, Height = 640 };
+    public WindowState ControllerWindow  { get; set; } = new() { X = 50,  Y = 80,  Width = 600, Height = 640 };
 
     // Content protection: hide overlay from screen share (default on)
     public bool OverlayProtected    { get; set; } = true;

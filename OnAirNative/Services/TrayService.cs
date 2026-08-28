@@ -126,7 +126,7 @@ public sealed class TrayService : IDisposable
             uFlags           = NativeMethods.NIF_MESSAGE | NativeMethods.NIF_ICON | NativeMethods.NIF_TIP,
             uCallbackMessage = WM_TRAY,
             hIcon            = hIcon,
-            szTip            = "onAIr Native",
+            szTip            = "onAIr",
             szInfo           = "",
             szInfoTitle      = "",
         };
@@ -134,7 +134,7 @@ public sealed class TrayService : IDisposable
         bool ok = NativeMethods.Shell_NotifyIconW(NativeMethods.NIM_ADD, ref data);
 
         // Log success/failure for diagnostics
-        var logDir  = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "onAIr Native");
+        var logDir  = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "onAIr");
         Directory.CreateDirectory(logDir);
         File.AppendAllText(Path.Combine(logDir, "tray.log"),
             $"{DateTime.Now:HH:mm:ss} Shell_NotifyIcon={ok}, hIcon={hIcon}, ico={icoPath}, exists={File.Exists(icoPath)}\n");
@@ -181,13 +181,13 @@ public sealed class TrayService : IDisposable
     {
         var menu = NativeMethods.CreatePopupMenu();
 
-        NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_SHOW_OVERLAY, "👁  Show overlay");
-        NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_HIDE_OVERLAY, "🫥  Hide overlay");
+        NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_SHOW_OVERLAY, "📦  Open Box");
+        NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_HIDE_OVERLAY, "🙈  Hide Box");
         NativeMethods.AppendMenu(menu, NativeMethods.MF_SEPARATOR, MENU_SEPARATOR, null);
         NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_LOAD_SCRIPT,  "📄  Load script (.txt)…");
-        NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_CONTROLLER,   "🎛  Show controller");
+        NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_CONTROLLER,   "🎛  Show Controller");
         NativeMethods.AppendMenu(menu, NativeMethods.MF_SEPARATOR, MENU_SEPARATOR, null);
-        NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_QUIT,         "✕  Quit onAIr Native");
+        NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_QUIT,         "✕  Quit onAIr");
 
         // Required so the menu dismisses when you click outside it
         NativeMethods.SetForegroundWindow(hWnd);

@@ -22,12 +22,33 @@ public sealed partial class ControllerWindow : Window
     // Guard flag: true while PopulateStaticUi is running.
     // Prevents slider ValueChanged handlers from writing to config during initialization.
     private bool _populatingUi;
+    // Auto-check for updates only once per session, the first time the About tab is opened.
+    private bool _updateCheckedThisSession;
 
     public ControllerWindow()
     {
         InitializeComponent();
+
+        // Apply the saved theme before the first paint so there's no light→dark flash.
+        ApplyTheme(App.Config.Current.Theme);
+
         Activated += OnFirstActivated;
         Closed    += OnClosed;
+    }
+
+    /// <summary>Applies "System" | "Light" | "Dark" to the window's visual tree (and any
+    /// ContentDialogs anchored to it, since they share the same XamlRoot).</summary>
+    private void ApplyTheme(string theme)
+    {
+        var elementTheme = theme switch
+        {
+            "Light" => ElementTheme.Light,
+            "Dark"  => ElementTheme.Dark,
+            _       => ElementTheme.Default,
+        };
+
+        if (Content is FrameworkElement root)
+            root.RequestedTheme = elementTheme;
     }
 
     private bool _setupDone;
@@ -39,7 +60,7 @@ public sealed partial class ControllerWindow : Window
 
         var logDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "onAIr Native");
+            "onAIr");
         Directory.CreateDirectory(logDir);
         var logPath = Path.Combine(logDir, "controller-init.log");
 
@@ -76,11 +97,11 @@ public sealed partial class ControllerWindow : Window
             // Set default scroll mode selection (IsChecked in XAML causes bug in WinUI 3 2.1.x)
             ScrollManualRadio.IsChecked = true;
 
-            // Overlay starts visible — sync the toggle button
+            // Box (overlay window) starts hidden — sync the toggle button
             OverlayToggle.IsChecked = false;
             SyncOverlayToggle(false);
 
-            // Overlay starts unlocked (move mode = interactive)
+            // Box starts unlocked (move mode = interactive)
             LockToggle.IsChecked = false;
             SyncLockToggle(false);
 
@@ -88,7 +109,7 @@ public sealed partial class ControllerWindow : Window
             WindowService.SetContentProtection(_hwnd, App.Config.Current.ControllerProtected);
             ProtectToggle.IsChecked = App.Config.Current.ControllerProtected;
 
-            // Overlay screen-share protection state (applied by OverlayWindow itself on
+            // Box screen-share protection state (applied by OverlayWindow itself on
             // its own first-activate; here we just sync the footer toggle to match).
             OverlayProtectToggle.IsChecked = App.Config.Current.OverlayProtected;
             SyncOverlayProtectToggle(App.Config.Current.OverlayProtected);
@@ -104,7 +125,7 @@ public sealed partial class ControllerWindow : Window
     /// <summary>Called from ControllerWindow.OnFirstActivated (after _hwnd is valid).</summary>
     public void InitViewModel()
     {
-        ViewModel = new ControllerViewModel(App.Config, Overlay!.ViewModel, App.AiChat);
+        ViewModel = new ControllerViewModel(App.Config, Overlay!.ViewModel, App.AiChat, App.Update);
         ViewModel.ControllerProtectionChanged += (_, protect) =>
             WindowService.SetContentProtection(_hwnd, protect);
         ViewModel.OverlayProtectionChanged += (_, protect) =>
@@ -112,6 +133,12 @@ public sealed partial class ControllerWindow : Window
             if (Overlay is not null)
                 WindowService.SetContentProtection(WindowService.GetHwnd(Overlay), protect);
         };
+        ViewModel.ThemeChanged += (_, theme) => ApplyTheme(theme);
+
+        // Update check/install status → About tab UI
+        ViewModel.AboutTab.PropertyChanged += OnAboutTabPropertyChanged;
+        // Installer has been launched (elevated, via UAC) — close so it can overwrite our files
+        ViewModel.AboutTab.InstallerLaunched += (_, _) => Close();
 
         ViewModel.ScrollTab.OpacityChanged += (_, opacity) =>
         {
@@ -127,11 +154,15 @@ public sealed partial class ControllerWindow : Window
                 FileNameText.Text = ViewModel.ScrollTab.LoadedFileName;
         };
 
-        // Sync LockToggle when move mode changes (e.g., via Ctrl+Alt+Home hotkey)
+        // Sync LockToggle when move mode changes (e.g., via Ctrl+Alt+Home hotkey).
+        // Setting IsChecked (not just calling SyncLockToggle) keeps the button's actual
+        // toggle state in sync with its label — otherwise a hotkey-driven change would
+        // update the text but leave IsChecked stale, so the next manual click would
+        // silently re-affirm the current state instead of flipping it as the label implies.
         Overlay.ViewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.IsMoveModeActive))
-                SyncLockToggle(!Overlay.ViewModel.IsMoveModeActive);
+                LockToggle.IsChecked = !Overlay.ViewModel.IsMoveModeActive;
         };
 
         PopulateStaticUi();
@@ -155,19 +186,22 @@ public sealed partial class ControllerWindow : Window
             // Scroll tab — set ranges THEN values.
             // Must be inside _populatingUi guard: setting Minimum causes WinUI 3 to clamp
             // the current value (0 → min), firing ValueChanged which would overwrite the config.
-            ScrollStepSlider.Minimum    = 20;
-            ScrollStepSlider.Maximum    = 400;
-            ScrollSpeedSlider.Minimum   = 1;
-            ScrollSpeedSlider.Maximum   = 100;
-            FontSizeSlider.Minimum      = 10;
-            FontSizeSlider.Maximum      = 64;
-            OpacitySlider.Minimum       = 10;
-            OpacitySlider.Maximum       = 100;
+            ScrollStepSlider.Minimum       = 20;
+            ScrollStepSlider.Maximum       = 400;
+            ScrollSpeedSlider.Minimum      = 1;
+            ScrollSpeedSlider.Maximum      = 100;
+            VoiceScrollSpeedSlider.Minimum = 1;
+            VoiceScrollSpeedSlider.Maximum = 100;
+            FontSizeSlider.Minimum         = 10;
+            FontSizeSlider.Maximum         = 64;
+            OpacitySlider.Minimum          = 10;
+            OpacitySlider.Maximum          = 100;
 
-            ScrollStepSlider.Value  = ViewModel.ScrollTab.ScrollStep;
-            ScrollSpeedSlider.Value = ViewModel.ScrollTab.ScrollSpeed;
-            FontSizeSlider.Value    = ViewModel.ScrollTab.FontSize;
-            OpacitySlider.Value     = ViewModel.ScrollTab.Opacity * 100;
+            ScrollStepSlider.Value       = ViewModel.ScrollTab.ScrollStep;
+            ScrollSpeedSlider.Value      = ViewModel.ScrollTab.ScrollSpeed;
+            VoiceScrollSpeedSlider.Value = ViewModel.ScrollTab.VoiceScrollSpeed;
+            FontSizeSlider.Value         = ViewModel.ScrollTab.FontSize;
+            OpacitySlider.Value          = ViewModel.ScrollTab.Opacity * 100;
 
             FileNameText.Text = ViewModel.ScrollTab.LoadedFileName;
             FontColorIndicator.Text = App.Config.Current.Appearance.FontColor;
@@ -175,6 +209,9 @@ public sealed partial class ControllerWindow : Window
             // About
             VersionText.Text = $"v{ViewModel.AboutTab.Version}";
             AuthorsText.Text = ViewModel.AboutTab.Authors;
+            UpdateStatusTextBlock.Text  = "";
+            UpdateDownloadPanel.Visibility = Visibility.Collapsed;
+            UpdateProgressBar.Visibility   = Visibility.Collapsed;
 
             // Select first nav item
             NavView.SelectedItem = NavView.MenuItems[0];
@@ -191,6 +228,11 @@ public sealed partial class ControllerWindow : Window
             VoiceThresholdSlider.Maximum = 50;
             VoiceThresholdSlider.Value = App.Config.Current.Appearance.VoiceRmsThreshold;
             VoiceThresholdValue.Text   = $"Current: {App.Config.Current.Appearance.VoiceRmsThreshold:F1}";
+
+            // Settings tab — theme
+            ThemeSystemRadio.IsChecked = App.Config.Current.Theme == "System";
+            ThemeLightRadio.IsChecked  = App.Config.Current.Theme == "Light";
+            ThemeDarkRadio.IsChecked   = App.Config.Current.Theme == "Dark";
         }
         finally
         {
@@ -223,6 +265,56 @@ public sealed partial class ControllerWindow : Window
         }
     }
 
+    // ── About tab — update check/install status ──────────────────────────────
+
+    private void OnAboutTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(AboutTabViewModel.UpdateStatusText):
+                UpdateStatusTextBlock.Text = ViewModel.AboutTab.UpdateStatusText;
+                break;
+            case nameof(AboutTabViewModel.IsUpdateAvailable):
+                UpdateDownloadPanel.Visibility = ViewModel.AboutTab.IsUpdateAvailable
+                    ? Visibility.Visible : Visibility.Collapsed;
+                DownloadUpdateBtn.Content = $"⬇ Download & Install v{ViewModel.AboutTab.LatestVersion}";
+                break;
+            case nameof(AboutTabViewModel.IsCheckingForUpdate):
+                CheckUpdatesBtn.IsEnabled = !ViewModel.AboutTab.IsCheckingForUpdate;
+                break;
+            case nameof(AboutTabViewModel.IsDownloadingUpdate):
+                UpdateProgressBar.Visibility = ViewModel.AboutTab.IsDownloadingUpdate
+                    ? Visibility.Visible : Visibility.Collapsed;
+                DownloadUpdateBtn.IsEnabled = !ViewModel.AboutTab.IsDownloadingUpdate;
+                CheckUpdatesBtn.IsEnabled   = !ViewModel.AboutTab.IsDownloadingUpdate;
+                break;
+            case nameof(AboutTabViewModel.DownloadProgress):
+                UpdateProgressBar.Value = ViewModel.AboutTab.DownloadProgress;
+                break;
+        }
+    }
+
+    private async void CheckUpdatesButton_Click(object sender, RoutedEventArgs e) =>
+        await ViewModel.AboutTab.CheckForUpdatesCommand.ExecuteAsync(null);
+
+    private async void DownloadUpdateButton_Click(object sender, RoutedEventArgs e)
+    {
+        var confirm = new ContentDialog
+        {
+            XamlRoot          = Content.XamlRoot,
+            Title             = "Update onAIr?",
+            Content           = $"A new version (v{ViewModel.AboutTab.LatestVersion}) is available.\n\n" +
+                                 "onAIr will close so the installer can run. " +
+                                 "Windows may ask for administrator permission.",
+            PrimaryButtonText = "Update now",
+            CloseButtonText   = "Not now",
+            DefaultButton     = ContentDialogButton.Primary,
+        };
+
+        if (await confirm.ShowAsync() == ContentDialogResult.Primary)
+            await ViewModel.AboutTab.DownloadAndInstallCommand.ExecuteAsync(null);
+    }
+
     // ── NavigationView tab switching ──────────────────────────────────────────
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -242,6 +334,13 @@ public sealed partial class ControllerWindow : Window
         // Auto-refresh device list when Settings tab is opened
         if (tag == "settings" && WindowListCombo.Items.Count == 0)
             PopulateAudioDevices();
+
+        // Auto-check for updates the first time the About tab is opened this session
+        if (tag == "about" && !_updateCheckedThisSession)
+        {
+            _updateCheckedThisSession = true;
+            _ = ViewModel.AboutTab.CheckForUpdatesCommand.ExecuteAsync(null);
+        }
 
         // Sync overlay mode to match selected Controller tab
         if (Overlay is not null && tag is "script" or "qa")
@@ -268,9 +367,18 @@ public sealed partial class ControllerWindow : Window
         if (_populatingUi) return;
         if (sender is not RadioButton rb) return;
         var tag = rb.Tag?.ToString();
-        SpeedLabel.Visibility        = tag == "Auto"  ? Visibility.Visible : Visibility.Collapsed;
-        ScrollSpeedSlider.Visibility = tag == "Auto"  ? Visibility.Visible : Visibility.Collapsed;
-        VoiceLevelPanel.Visibility   = tag == "Voice" ? Visibility.Visible : Visibility.Collapsed;
+
+        // Exactly one mode-specific control is visible at a time — Manual's fixed
+        // step-per-press doesn't apply to Auto's continuous speed, and Voice now has
+        // its own independent speed (see VoiceScrollSpeed), so showing all three at
+        // once was confusing and implied they were all simultaneously in effect.
+        StepLabel.Visibility             = tag == "Manual" ? Visibility.Visible : Visibility.Collapsed;
+        ScrollStepSlider.Visibility      = tag == "Manual" ? Visibility.Visible : Visibility.Collapsed;
+        SpeedLabel.Visibility            = tag == "Auto"   ? Visibility.Visible : Visibility.Collapsed;
+        ScrollSpeedSlider.Visibility     = tag == "Auto"   ? Visibility.Visible : Visibility.Collapsed;
+        VoiceSpeedLabel.Visibility       = tag == "Voice"  ? Visibility.Visible : Visibility.Collapsed;
+        VoiceScrollSpeedSlider.Visibility = tag == "Voice" ? Visibility.Visible : Visibility.Collapsed;
+        VoiceLevelPanel.Visibility       = tag == "Voice"  ? Visibility.Visible : Visibility.Collapsed;
 
         if (ViewModel is null) return;
         ViewModel.ScrollTab.SelectedScrollModeIndex = tag switch
@@ -279,6 +387,14 @@ public sealed partial class ControllerWindow : Window
             "Voice" => 2,
             _       => 0,
         };
+    }
+
+    /// <summary>Shared Checked handler for the Settings tab's System/Light/Dark radio group.</summary>
+    private void ThemeRadioChanged(object sender, RoutedEventArgs e)
+    {
+        if (_populatingUi) return;
+        if (sender is not RadioButton rb) return;
+        ViewModel.Theme = rb.Tag?.ToString() ?? "System";
     }
 
     private void ScrollStepSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -293,17 +409,86 @@ public sealed partial class ControllerWindow : Window
         ViewModel.ScrollTab.ScrollSpeed = (int)e.NewValue;
     }
 
+    private void VoiceScrollSpeedSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (_populatingUi) return;
+        ViewModel.ScrollTab.VoiceScrollSpeed = (int)e.NewValue;
+    }
+
+    /// <summary>
+    /// Nudges Auto-scroll speed by <see cref="ScrollSpeedStep"/> points, called from the
+    /// Ctrl+Alt+./, global hotkeys. <paramref name="direction"/> is +1 to increase, -1 to decrease.
+    /// </summary>
+    public void AdjustScrollSpeed(int direction)
+    {
+        var newSpeed = (int)Math.Clamp(
+            ViewModel.ScrollTab.ScrollSpeed + direction * ScrollSpeedStep,
+            ScrollSpeedSlider.Minimum, ScrollSpeedSlider.Maximum);
+
+        _populatingUi = true;
+        try
+        {
+            ViewModel.ScrollTab.ScrollSpeed = newSpeed;
+            ScrollSpeedSlider.Value = newSpeed;
+        }
+        finally { _populatingUi = false; }
+    }
+
+    private const int ScrollSpeedStep = 5;
+
     private void FontSizeSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
         if (_populatingUi) return;
         ViewModel.ScrollTab.FontSize = (int)e.NewValue;
     }
 
+    /// <summary>
+    /// Nudges script font size by <see cref="FontSizeStep"/> points, called from the
+    /// Ctrl+Alt+=/- global hotkeys. <paramref name="direction"/> is +1 to increase, -1 to decrease.
+    /// </summary>
+    public void AdjustFontSize(int direction)
+    {
+        var newSize = (int)Math.Clamp(
+            ViewModel.ScrollTab.FontSize + direction * FontSizeStep,
+            FontSizeSlider.Minimum, FontSizeSlider.Maximum);
+
+        _populatingUi = true;
+        try
+        {
+            ViewModel.ScrollTab.FontSize = newSize;
+            FontSizeSlider.Value = newSize;
+        }
+        finally { _populatingUi = false; }
+    }
+
+    private const int FontSizeStep = 2;
+
     private void OpacitySlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
         if (_populatingUi) return;
         ViewModel.ScrollTab.Opacity = e.NewValue / 100.0;
     }
+
+    /// <summary>
+    /// Nudges overlay opacity by <see cref="OpacityStepPercent"/> points, called from the
+    /// Ctrl+Alt+]/[ global hotkeys. <paramref name="direction"/> is +1 to increase, -1 to decrease.
+    /// </summary>
+    public void AdjustOpacity(int direction)
+    {
+        var newOpacityPercent = Math.Clamp(
+            ViewModel.ScrollTab.Opacity * 100 + direction * OpacityStepPercent,
+            OpacitySlider.Minimum, OpacitySlider.Maximum);
+
+        _populatingUi = true;
+        try
+        {
+            ViewModel.ScrollTab.Opacity = newOpacityPercent / 100.0; // saves config + updates overlay via OpacityChanged
+            OpacitySlider.Value = newOpacityPercent;                 // keep the visible slider in sync
+        }
+        finally { _populatingUi = false; }
+    }
+
+    private const double OpacityStepPercent = 5;
 
     // ── AI tab handlers ───────────────────────────────────────────────────────
 
@@ -362,7 +547,7 @@ public sealed partial class ControllerWindow : Window
     private void GitHubLink_Click(object sender, RoutedEventArgs e) =>
         ViewModel.AboutTab.OpenSourceRepoCommand.Execute(null);
 
-    // ── Overlay visibility ────────────────────────────────────────────────────
+    // ── Box visibility (Open Box) ─────────────────────────────────────────────
 
     private void OverlayToggle_Checked(object sender, RoutedEventArgs e)
     {
@@ -376,13 +561,21 @@ public sealed partial class ControllerWindow : Window
         if (Overlay is not null) WindowService.HideWindow(Overlay);
     }
 
+    /// <summary>Syncs the "Open Box" toggle's checked state. The label itself is static
+    /// ("📦 Open Box") — only the pressed/checked visual reflects whether the Box is
+    /// currently open. Public because the tray menu shows/hides the Box directly via
+    /// WindowService without going through this button's click.</summary>
     public void SyncOverlayToggle(bool visible)
     {
         if (OverlayToggle is null) return;
-        OverlayToggle.Content = visible ? "👁 Overlay: visible" : "🫥 Overlay: hidden";
+        OverlayToggle.IsChecked = visible;
     }
 
-    // ── Lock / Unlock overlay ─────────────────────────────────────────────────
+    /// <summary>Toggles the Box open/hidden — used by the Ctrl+Alt+V global hotkey.</summary>
+    public void ToggleOverlayVisibility() =>
+        OverlayToggle.IsChecked = !(OverlayToggle.IsChecked ?? false);
+
+    // ── Lock / Unlock Box ──────────────────────────────────────────────────────
 
     private void LockToggle_Checked(object sender, RoutedEventArgs e)
     {
@@ -396,10 +589,12 @@ public sealed partial class ControllerWindow : Window
         Overlay?.ViewModel.SetMoveMode(true);  // unlocked = interactive
     }
 
+    /// <summary>Syncs the "Lock Box" toggle's checked state (static label; only the
+    /// pressed/checked visual reflects the current lock state).</summary>
     public void SyncLockToggle(bool locked)
     {
         if (LockToggle is null) return;
-        LockToggle.Content = locked ? "🔒 Overlay: locked" : "🔓 Overlay: unlocked";
+        LockToggle.IsChecked = locked;
     }
 
     // ── Save / Reset settings ─────────────────────────────────────────────────
@@ -422,14 +617,16 @@ public sealed partial class ControllerWindow : Window
 
     private void ResetSettings_Click(object sender, RoutedEventArgs e)
     {
-        ViewModel.ScrollTab.ScrollStep  = 120;
-        ViewModel.ScrollTab.ScrollSpeed = 50;
-        ViewModel.ScrollTab.FontSize    = 22;
-        ViewModel.ScrollTab.Opacity     = 0.75;
-        ScrollStepSlider.Value  = 120;
-        ScrollSpeedSlider.Value = 50;
-        FontSizeSlider.Value    = 22;
-        OpacitySlider.Value     = 75;
+        ViewModel.ScrollTab.ScrollStep       = 120;
+        ViewModel.ScrollTab.ScrollSpeed      = 50;
+        ViewModel.ScrollTab.VoiceScrollSpeed = 50;
+        ViewModel.ScrollTab.FontSize         = 22;
+        ViewModel.ScrollTab.Opacity          = 0.75;
+        ScrollStepSlider.Value       = 120;
+        ScrollSpeedSlider.Value      = 50;
+        VoiceScrollSpeedSlider.Value = 50;
+        FontSizeSlider.Value         = 22;
+        OpacitySlider.Value          = 75;
         App.Config.Save();
         SaveStatusText.Text = "↺ Defaults restored";
         var t = new Microsoft.UI.Xaml.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
@@ -437,7 +634,7 @@ public sealed partial class ControllerWindow : Window
         t.Start();
     }
 
-    // ── Footer: screen-share protection toggle ────────────────────────────────
+    // ── Footer: Hide Controller (screen-share protection) ─────────────────────
 
     private void ProtectToggle_Checked(object sender, RoutedEventArgs e) =>
         ViewModel.ControllerProtected = true;
@@ -445,9 +642,13 @@ public sealed partial class ControllerWindow : Window
     private void ProtectToggle_Unchecked(object sender, RoutedEventArgs e) =>
         ViewModel.ControllerProtected = false;
 
-    // ── Footer: overlay screen-share protection toggle ────────────────────────
-    // Lets the presenter reveal the teleprompter overlay to viewers of a shared
-    // screen/recording (default is hidden, same as before this toggle existed).
+    /// <summary>Toggles "Hide Controller" — used by the Ctrl+Alt+H global hotkey.</summary>
+    public void ToggleControllerCaptureProtection() =>
+        ProtectToggle.IsChecked = !(ProtectToggle.IsChecked ?? false);
+
+    // ── Footer: Hide Box (screen-share protection) ─────────────────────────────
+    // Lets the presenter reveal the Box to viewers of a shared screen/recording
+    // (default is hidden, same as before this toggle existed).
 
     private void OverlayProtectToggle_Checked(object sender, RoutedEventArgs e)
     {
@@ -461,11 +662,17 @@ public sealed partial class ControllerWindow : Window
         SyncOverlayProtectToggle(false);
     }
 
+    /// <summary>Syncs the "Hide Box" toggle's checked state (static label; only the
+    /// pressed/checked visual reflects whether the Box is currently hidden from capture).</summary>
     private void SyncOverlayProtectToggle(bool protect)
     {
         if (OverlayProtectToggle is null) return;
-        OverlayProtectToggle.Content = protect ? "🙈 Overlay: hidden in share" : "📽 Overlay: visible in share";
+        OverlayProtectToggle.IsChecked = protect;
     }
+
+    /// <summary>Toggles "Hide Box" (visible/hidden in share) — used by the Ctrl+Alt+S global hotkey.</summary>
+    public void ToggleOverlayCaptureProtection() =>
+        OverlayProtectToggle.IsChecked = !(OverlayProtectToggle.IsChecked ?? false);
 
     // ── Q&A — Record button (moved from overlay) ──────────────────────────────
 
@@ -591,8 +798,16 @@ public sealed partial class ControllerWindow : Window
         }
     }
 
-    private void ReleaseEmbedBtn_Click(object sender, RoutedEventArgs e)
+    private void ReleaseEmbedBtn_Click(object sender, RoutedEventArgs e) => ReleaseStealthContainer();
+
+    /// <summary>
+    /// Releases the embedded App Stealth container, if any. Safe to call when nothing is
+    /// embedded (no-op) — used by both the Release button and the Ctrl+Alt+U global hotkey.
+    /// </summary>
+    public void ReleaseStealthContainer()
     {
+        if (!_embedService.IsEmbedding) return;
+
         _embedService.Release();
         StealthStatusText.Text     = "Released";
         EmbedBtn.Visibility        = Visibility.Visible;

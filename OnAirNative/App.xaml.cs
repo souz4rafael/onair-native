@@ -17,6 +17,7 @@ public partial class App : Application
     public static AiChatService     AiChat     { get; private set; } = null!;
     public static HotkeyService     Hotkeys    { get; private set; } = null!;
     public static TrayService       Tray       { get; private set; } = null!;
+    public static UpdateService     Update     { get; private set; } = null!;
 
     private OverlayWindow?    _overlay;
     private ControllerWindow? _controller;
@@ -38,7 +39,7 @@ public partial class App : Application
         {
             var log = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "onAIr Native", "crash.log");
+                "onAIr", "crash.log");
             Directory.CreateDirectory(Path.GetDirectoryName(log)!);
             File.WriteAllText(log, $"{DateTime.Now}\n{ex}\n");
             throw;
@@ -49,7 +50,7 @@ public partial class App : Application
     {
         var logDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "onAIr Native");
+            "onAIr");
         Directory.CreateDirectory(logDir);
         var logPath = Path.Combine(logDir, "launch.log");
         File.AppendAllText(logPath, $"\n{DateTime.Now:yyyy-MM-dd HH:mm:ss} === Launch start ===\n");
@@ -66,6 +67,8 @@ public partial class App : Application
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} WhisperService OK\n");
         AiChat  = new AiChatService();
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} AiChatService OK\n");
+        Update  = new UpdateService();
+        File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} UpdateService OK\n");
 
         // Create and show windows
         _overlay    = new OverlayWindow();
@@ -104,7 +107,7 @@ public partial class App : Application
         Tray.Start();
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} TrayService started\n");
 
-        // Handle .txt file opened via right-click → "Open with onAIr Native"
+        // Handle .txt file opened via right-click → "Open with onAIr"
         var activationArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
         HandleActivation(activationArgs);
 
@@ -142,11 +145,35 @@ public partial class App : Application
             case HotkeyAction.OpenFile:
                 _ = _overlay?.ViewModel.OpenFilePickerAsync(_overlay);
                 break;
-            case HotkeyAction.SwitchMode:
-                _overlay?.ViewModel.CycleMode();
+            case HotkeyAction.IncreaseOpacity:
+                _controller?.AdjustOpacity(+1);
                 break;
-            case HotkeyAction.OpenController:
-                if (_controller is not null) WindowService.BringToFront(_controller);
+            case HotkeyAction.DecreaseOpacity:
+                _controller?.AdjustOpacity(-1);
+                break;
+            case HotkeyAction.ReleaseStealthContainer:
+                _controller?.ReleaseStealthContainer();
+                break;
+            case HotkeyAction.ToggleOverlayVisibility:
+                _controller?.ToggleOverlayVisibility();
+                break;
+            case HotkeyAction.ToggleOverlayCaptureProtection:
+                _controller?.ToggleOverlayCaptureProtection();
+                break;
+            case HotkeyAction.ToggleControllerCaptureProtection:
+                _controller?.ToggleControllerCaptureProtection();
+                break;
+            case HotkeyAction.IncreaseScrollSpeed:
+                _controller?.AdjustScrollSpeed(+1);
+                break;
+            case HotkeyAction.DecreaseScrollSpeed:
+                _controller?.AdjustScrollSpeed(-1);
+                break;
+            case HotkeyAction.IncreaseFontSize:
+                _controller?.AdjustFontSize(+1);
+                break;
+            case HotkeyAction.DecreaseFontSize:
+                _controller?.AdjustFontSize(-1);
                 break;
         }
     }

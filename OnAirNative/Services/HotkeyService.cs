@@ -11,8 +11,16 @@ public enum HotkeyAction
     ToggleMoveMode,
     OpenFile,
     ToggleRecording,
-    OpenController,
-    SwitchMode,
+    IncreaseOpacity,
+    DecreaseOpacity,
+    ReleaseStealthContainer,
+    ToggleOverlayVisibility,
+    ToggleOverlayCaptureProtection,
+    ToggleControllerCaptureProtection,
+    IncreaseScrollSpeed,
+    DecreaseScrollSpeed,
+    IncreaseFontSize,
+    DecreaseFontSize,
 }
 
 /// <summary>
@@ -23,22 +31,40 @@ public enum HotkeyAction
 /// Hotkeys:
 ///   Ctrl+Alt+PgUp  → ScrollUp
 ///   Ctrl+Alt+PgDn  → ScrollDown
-///   Ctrl+Alt+Home  → ToggleMoveMode
+///   Ctrl+Alt+Home  → ToggleMoveMode (overlay locked/unlocked)
 ///   Ctrl+Alt+O     → OpenFile
 ///   Ctrl+Alt+R     → ToggleRecording
-///   Ctrl+Alt+M     → SwitchMode
-///   Ctrl+Alt+,     → OpenController
+///   Ctrl+Alt+]     → IncreaseOpacity
+///   Ctrl+Alt+[     → DecreaseOpacity
+///   Ctrl+Alt+U     → ReleaseStealthContainer
+///   Ctrl+Alt+V     → ToggleOverlayVisibility (show/hide the overlay window)
+///   Ctrl+Alt+S     → ToggleOverlayCaptureProtection (overlay visible/hidden in share)
+///   Ctrl+Alt+H     → ToggleControllerCaptureProtection (hide controller from capture)
+///   Ctrl+Alt+.     → IncreaseScrollSpeed (Auto-scroll speed)
+///   Ctrl+Alt+,     → DecreaseScrollSpeed (Auto-scroll speed)
+///   Ctrl+Alt+=     → IncreaseFontSize
+///   Ctrl+Alt+-     → DecreaseFontSize
 /// </summary>
 public sealed class HotkeyService : IDisposable
 {
-    // Hotkey IDs — arbitrary unique integers per application
-    private const int ID_SCROLL_UP   = 1;
-    private const int ID_SCROLL_DOWN = 2;
-    private const int ID_MOVE_MODE   = 3;
-    private const int ID_OPEN_FILE   = 4;
-    private const int ID_RECORD      = 5;
-    private const int ID_CONTROLLER  = 6;
-    private const int ID_SWITCH_MODE = 7;
+    // Hotkey IDs — arbitrary unique integers per application.
+    // Must stay contiguous from ID_SCROLL_UP to the last one: the cleanup loop
+    // unregisters the whole range by iterating this span.
+    private const int ID_SCROLL_UP                       = 1;
+    private const int ID_SCROLL_DOWN                     = 2;
+    private const int ID_MOVE_MODE                       = 3;
+    private const int ID_OPEN_FILE                       = 4;
+    private const int ID_RECORD                          = 5;
+    private const int ID_OPACITY_UP                      = 6;
+    private const int ID_OPACITY_DOWN                    = 7;
+    private const int ID_RELEASE_STEALTH                 = 8;
+    private const int ID_OVERLAY_VISIBILITY              = 9;
+    private const int ID_OVERLAY_CAPTURE_PROTECTION      = 10;
+    private const int ID_CONTROLLER_CAPTURE_PROTECTION   = 11;
+    private const int ID_SCROLL_SPEED_UP                 = 12;
+    private const int ID_SCROLL_SPEED_DOWN               = 13;
+    private const int ID_FONT_SIZE_UP                    = 14;
+    private const int ID_FONT_SIZE_DOWN                  = 15;
 
     private readonly DispatcherQueue _uiQueue;
     private Thread?  _thread;
@@ -90,13 +116,21 @@ public sealed class HotkeyService : IDisposable
                 NativeMethods.HWND_MESSAGE, IntPtr.Zero, hInst, IntPtr.Zero);
 
             // Register all hotkeys
-            Register(ID_SCROLL_UP,   NativeMethods.VK_PRIOR);
-            Register(ID_SCROLL_DOWN, NativeMethods.VK_NEXT);
-            Register(ID_MOVE_MODE,   NativeMethods.VK_HOME);
-            Register(ID_OPEN_FILE,   NativeMethods.VK_O);
-            Register(ID_RECORD,      NativeMethods.VK_R);
-            Register(ID_SWITCH_MODE, NativeMethods.VK_M);
-            Register(ID_CONTROLLER,  NativeMethods.VK_OEM_COMMA);
+            Register(ID_SCROLL_UP,                   NativeMethods.VK_PRIOR);
+            Register(ID_SCROLL_DOWN,                  NativeMethods.VK_NEXT);
+            Register(ID_MOVE_MODE,                    NativeMethods.VK_HOME);
+            Register(ID_OPEN_FILE,                    NativeMethods.VK_O);
+            Register(ID_RECORD,                       NativeMethods.VK_R);
+            Register(ID_OPACITY_UP,                   NativeMethods.VK_OEM_6);
+            Register(ID_OPACITY_DOWN,                 NativeMethods.VK_OEM_4);
+            Register(ID_RELEASE_STEALTH,              NativeMethods.VK_U);
+            Register(ID_OVERLAY_VISIBILITY,           NativeMethods.VK_V);
+            Register(ID_OVERLAY_CAPTURE_PROTECTION,   NativeMethods.VK_S);
+            Register(ID_CONTROLLER_CAPTURE_PROTECTION, NativeMethods.VK_H);
+            Register(ID_SCROLL_SPEED_UP,              NativeMethods.VK_OEM_PERIOD);
+            Register(ID_SCROLL_SPEED_DOWN,            NativeMethods.VK_OEM_COMMA);
+            Register(ID_FONT_SIZE_UP,                 NativeMethods.VK_OEM_PLUS);
+            Register(ID_FONT_SIZE_DOWN,               NativeMethods.VK_OEM_MINUS);
 
             // Pump messages until WM_QUIT
             while (NativeMethods.GetMessage(out var msg, IntPtr.Zero, 0, 0))
@@ -108,7 +142,7 @@ public sealed class HotkeyService : IDisposable
         finally
         {
             // Cleanup hotkeys and window
-            for (int id = ID_SCROLL_UP; id <= ID_SWITCH_MODE; id++)
+            for (int id = ID_SCROLL_UP; id <= ID_FONT_SIZE_DOWN; id++)
                 NativeMethods.UnregisterHotKey(_hwnd, id);
 
             if (_hwnd != IntPtr.Zero) NativeMethods.DestroyWindow(_hwnd);
@@ -128,14 +162,22 @@ public sealed class HotkeyService : IDisposable
             {
                 var action = (int)wParam switch
                 {
-                    ID_SCROLL_UP   => (HotkeyAction?)HotkeyAction.ScrollUp,
-                    ID_SCROLL_DOWN => HotkeyAction.ScrollDown,
-                    ID_MOVE_MODE   => HotkeyAction.ToggleMoveMode,
-                    ID_OPEN_FILE   => HotkeyAction.OpenFile,
-                    ID_RECORD      => HotkeyAction.ToggleRecording,
-                    ID_CONTROLLER  => HotkeyAction.OpenController,
-                    ID_SWITCH_MODE => HotkeyAction.SwitchMode,
-                    _              => null,
+                    ID_SCROLL_UP                        => (HotkeyAction?)HotkeyAction.ScrollUp,
+                    ID_SCROLL_DOWN                       => HotkeyAction.ScrollDown,
+                    ID_MOVE_MODE                          => HotkeyAction.ToggleMoveMode,
+                    ID_OPEN_FILE                          => HotkeyAction.OpenFile,
+                    ID_RECORD                             => HotkeyAction.ToggleRecording,
+                    ID_OPACITY_UP                         => HotkeyAction.IncreaseOpacity,
+                    ID_OPACITY_DOWN                       => HotkeyAction.DecreaseOpacity,
+                    ID_RELEASE_STEALTH                    => HotkeyAction.ReleaseStealthContainer,
+                    ID_OVERLAY_VISIBILITY                 => HotkeyAction.ToggleOverlayVisibility,
+                    ID_OVERLAY_CAPTURE_PROTECTION         => HotkeyAction.ToggleOverlayCaptureProtection,
+                    ID_CONTROLLER_CAPTURE_PROTECTION      => HotkeyAction.ToggleControllerCaptureProtection,
+                    ID_SCROLL_SPEED_UP                    => HotkeyAction.IncreaseScrollSpeed,
+                    ID_SCROLL_SPEED_DOWN                  => HotkeyAction.DecreaseScrollSpeed,
+                    ID_FONT_SIZE_UP                       => HotkeyAction.IncreaseFontSize,
+                    ID_FONT_SIZE_DOWN                     => HotkeyAction.DecreaseFontSize,
+                    _                                     => null,
                 };
                 if (action.HasValue)
                 {

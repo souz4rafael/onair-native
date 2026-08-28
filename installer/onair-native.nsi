@@ -1,6 +1,6 @@
-; onAIr Native — NSIS installer script
+; onAIr — NSIS installer script
 ; Build with:  makensis onair-native.nsi
-; Produces:    onAIr-Native-Setup-${VERSION}.exe  (self-contained, no prerequisites)
+; Produces:    onAIr-Setup-${VERSION}.exe  (self-contained, no prerequisites)
 
 Unicode true
 SetCompressor /SOLID lzma
@@ -8,13 +8,13 @@ SetCompressor /SOLID lzma
 ;-------------------------------------------------------------
 ;  Product metadata
 ;-------------------------------------------------------------
-!define PRODUCT_NAME        "onAIr Native"
-!define PRODUCT_VERSION     "1.0.5"
+!define PRODUCT_NAME        "onAIr"
+!define PRODUCT_VERSION     "1.1.0"
 !define PRODUCT_PUBLISHER   "Rafael Souza"
 !define PRODUCT_WEB_SITE    "https://github.com/souz4rafael/onair-native"
 !define PRODUCT_EXE         "OnAirNative.exe"
-!define PRODUCT_DIRREGKEY   "Software\onAIr Native"
-!define UNINST_REGKEY       "Software\Microsoft\Windows\CurrentVersion\Uninstall\onAIr Native"
+!define PRODUCT_DIRREGKEY   "Software\${PRODUCT_NAME}"
+!define UNINST_REGKEY       "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 
 ; Folder produced by `dotnet publish ... -o ..\dist\publish-current`
 !define PUBLISH_DIR         "..\dist\publish-current"
@@ -32,7 +32,7 @@ SetCompressor /SOLID lzma
 
 ; Offer to launch the app after install
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXE}"
-!define MUI_FINISHPAGE_RUN_TEXT "Launch onAIr Native"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch ${PRODUCT_NAME}"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -48,8 +48,8 @@ SetCompressor /SOLID lzma
 ;  Output
 ;-------------------------------------------------------------
 Name        "${PRODUCT_NAME} ${PRODUCT_VERSION}"
-OutFile     "onAIr-Native-Setup-${PRODUCT_VERSION}.exe"
-InstallDir  "$PROGRAMFILES64\onAIr Native"
+OutFile     "onAIr-Setup-${PRODUCT_VERSION}.exe"
+InstallDir  "$PROGRAMFILES64\${PRODUCT_NAME}"
 InstallDirRegKey HKLM "${PRODUCT_DIRREGKEY}" "InstallDir"
 RequestExecutionLevel admin
 
@@ -67,7 +67,7 @@ VIAddVersionKey "FileDescription" "${PRODUCT_NAME} Setup"
 ;-------------------------------------------------------------
 ;  Install
 ;-------------------------------------------------------------
-Section "onAIr Native (required)" SEC_MAIN
+Section "${PRODUCT_NAME} (required)" SEC_MAIN
   SectionIn RO
   SetOutPath "$INSTDIR"
   SetOverwrite on
@@ -90,10 +90,10 @@ Section "onAIr Native (required)" SEC_MAIN
   Delete "$INSTDIR\WindowsAppRuntimeInstall-x64.exe"
 
   ; Start Menu + Desktop shortcuts
-  CreateDirectory "$SMPROGRAMS\onAIr Native"
-  CreateShortCut  "$SMPROGRAMS\onAIr Native\onAIr Native.lnk" "$INSTDIR\${PRODUCT_EXE}" "" "$INSTDIR\Assets\app-icon.ico"
-  CreateShortCut  "$SMPROGRAMS\onAIr Native\Uninstall onAIr Native.lnk" "$INSTDIR\uninstall.exe"
-  CreateShortCut  "$DESKTOP\onAIr Native.lnk" "$INSTDIR\${PRODUCT_EXE}" "" "$INSTDIR\Assets\app-icon.ico"
+  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
+  CreateShortCut  "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_EXE}" "" "$INSTDIR\Assets\app-icon.ico"
+  CreateShortCut  "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall ${PRODUCT_NAME}.lnk" "$INSTDIR\uninstall.exe"
+  CreateShortCut  "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_EXE}" "" "$INSTDIR\Assets\app-icon.ico"
 
   ; Remember install location
   WriteRegStr HKLM "${PRODUCT_DIRREGKEY}" "InstallDir" "$INSTDIR"
@@ -123,10 +123,10 @@ SectionEnd
 ;-------------------------------------------------------------
 Section "Uninstall"
   ; Shortcuts
-  Delete "$DESKTOP\onAIr Native.lnk"
-  Delete "$SMPROGRAMS\onAIr Native\onAIr Native.lnk"
-  Delete "$SMPROGRAMS\onAIr Native\Uninstall onAIr Native.lnk"
-  RMDir  "$SMPROGRAMS\onAIr Native"
+  Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall ${PRODUCT_NAME}.lnk"
+  RMDir  "$SMPROGRAMS\${PRODUCT_NAME}"
 
   ; Program files
   RMDir /r "$INSTDIR"

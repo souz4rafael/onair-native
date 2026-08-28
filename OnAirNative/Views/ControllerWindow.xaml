@@ -9,7 +9,25 @@
     mc:Ignorable="d"
     Title="onAIr — Controller">
 
-    <Grid>
+    <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+        <Grid.Resources>
+            <!-- Reusable "settings card" look for grouping related controls -->
+            <Style x:Key="CardBorderStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="8"/>
+                <Setter Property="Padding" Value="16"/>
+            </Style>
+            <!-- Bold, tracked-out, accent-colored card headers — punchier than CaptionTextBlockStyle
+                 so each card's name reads as a section header, not just another field label -->
+            <Style x:Key="CardTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="FontSize" Value="12"/>
+                <Setter Property="CharacterSpacing" Value="40"/>
+                <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+            </Style>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>   <!-- Tab bar -->
             <RowDefinition Height="*"/>      <!-- Tab content -->
@@ -63,84 +81,113 @@
                 <!-- ── Scroll Tab ─────────────────────────────────────── -->
                 <StackPanel x:Name="ScrollPanel" Spacing="14" Padding="16">
 
-                    <TextBlock Text="Script file" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="FileNameText"
-                                   Grid.Column="0"
-                                   VerticalAlignment="Center"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   FontSize="13"
-                                   Text="No file loaded"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <Button Grid.Column="1"
-                                Content="Load .txt…"
-                                Click="LoadFile_Click"
-                                Margin="8,0,0,0"/>
-                    </Grid>
-
-                    <TextBlock Text="Scroll mode" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <RadioButton x:Name="ScrollManualRadio" Content="Manual" Tag="Manual" Checked="ScrollModeChanged"/>
-                        <RadioButton x:Name="ScrollAutoRadio"   Content="Auto"   Tag="Auto"   Checked="ScrollModeChanged"/>
-                        <RadioButton x:Name="ScrollVoiceRadio"  Content="Voice"  Tag="Voice"  Checked="ScrollModeChanged"/>
-                    </StackPanel>
-
-                    <!-- Voice mode mic level indicator -->
-                    <Border x:Name="VoiceLevelPanel" Visibility="Collapsed"
-                            Background="#1A1A2E" CornerRadius="6" Padding="10,6">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <TextBlock Text="🎙" FontSize="14" VerticalAlignment="Center"/>
-                            <ProgressBar x:Name="MicLevelBar"
-                                         Minimum="0" Maximum="30"
-                                         Width="120" Height="8"
-                                         VerticalAlignment="Center"/>
-                            <TextBlock x:Name="MicLevelText"
-                                       FontSize="11"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       VerticalAlignment="Center"
-                                       Text="0.0"/>
-                            <TextBlock FontSize="11"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       VerticalAlignment="Center"
-                                       Text="(adjust threshold in Settings)"/>
+                    <!-- Card: Script file -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="SCRIPT FILE" Style="{StaticResource CardTitleStyle}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="FileNameText"
+                                           Grid.Column="0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           FontSize="13"
+                                           Text="No file loaded"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <Button Grid.Column="1"
+                                        Content="Load .txt…"
+                                        Click="LoadFile_Click"
+                                        Margin="8,0,0,0"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
 
-                    <TextBlock Text="Scroll step (px)" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <Slider x:Name="ScrollStepSlider" ValueChanged="ScrollStepSlider_ValueChanged"/>
+                    <!-- Card: Scroll mode selector -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="SCROLL MODE" Style="{StaticResource CardTitleStyle}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <RadioButton x:Name="ScrollManualRadio" Content="Manual" Tag="Manual" Checked="ScrollModeChanged"/>
+                                <RadioButton x:Name="ScrollAutoRadio"   Content="Auto"   Tag="Auto"   Checked="ScrollModeChanged"/>
+                                <RadioButton x:Name="ScrollVoiceRadio"  Content="Voice"  Tag="Voice"  Checked="ScrollModeChanged"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
 
-                    <TextBlock x:Name="SpeedLabel" Text="Auto-scroll speed"
-                               Style="{ThemeResource CaptionTextBlockStyle}" Visibility="Collapsed"/>
-                    <Slider x:Name="ScrollSpeedSlider" Visibility="Collapsed"
-                            ValueChanged="ScrollSpeedSlider_ValueChanged"/>
+                    <!-- Card: the control for whichever scroll mode is currently selected —
+                         exactly one of these three is visible at a time (see ScrollModeChanged) -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock x:Name="StepLabel" Text="SCROLL STEP (PX)"
+                                       Style="{StaticResource CardTitleStyle}"/>
+                            <Slider x:Name="ScrollStepSlider" ValueChanged="ScrollStepSlider_ValueChanged"/>
 
-                    <TextBlock Text="Font size" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <Slider x:Name="FontSizeSlider" ValueChanged="FontSizeSlider_ValueChanged"/>
+                            <TextBlock x:Name="SpeedLabel" Text="AUTO-SCROLL SPEED"
+                                       Style="{StaticResource CardTitleStyle}" Visibility="Collapsed"/>
+                            <Slider x:Name="ScrollSpeedSlider" Visibility="Collapsed"
+                                    ValueChanged="ScrollSpeedSlider_ValueChanged"/>
 
-                    <TextBlock Text="Overlay opacity" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <Slider x:Name="OpacitySlider" ValueChanged="OpacitySlider_ValueChanged"/>
+                            <TextBlock x:Name="VoiceSpeedLabel" Text="VOICE SCROLL SPEED"
+                                       Style="{StaticResource CardTitleStyle}" Visibility="Collapsed"/>
+                            <Slider x:Name="VoiceScrollSpeedSlider" Visibility="Collapsed"
+                                    ValueChanged="VoiceScrollSpeedSlider_ValueChanged"/>
 
-                    <!-- Font color presets -->
-                    <TextBlock Text="Font color" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <!-- Voice mode mic level indicator -->
+                            <Border x:Name="VoiceLevelPanel" Visibility="Collapsed"
+                                    Background="#1A1A2E" CornerRadius="6" Padding="10,6">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <TextBlock Text="🎙" FontSize="14" VerticalAlignment="Center"/>
+                                    <ProgressBar x:Name="MicLevelBar"
+                                                 Minimum="0" Maximum="30"
+                                                 Width="120" Height="8"
+                                                 VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="MicLevelText"
+                                               FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center"
+                                               Text="0.0"/>
+                                    <TextBlock FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center"
+                                               Text="(adjust threshold in Settings)"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Font size / Box opacity / Font color -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="APPEARANCE" Style="{StaticResource CardTitleStyle}"/>
+
+                            <TextBlock Text="Font size" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <Slider x:Name="FontSizeSlider" ValueChanged="FontSizeSlider_ValueChanged"/>
+
+                            <TextBlock Text="Box opacity" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <Slider x:Name="OpacitySlider" ValueChanged="OpacitySlider_ValueChanged"/>
+
+                            <!-- Font color presets -->
+                            <TextBlock Text="Font color" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="ColorWhite"    Width="32" Height="32" CornerRadius="16" Background="#F0F0F0" Tag="#F0F0F0"   Click="FontColor_Click" ToolTipService.ToolTip="White"/>
+                                <Button x:Name="ColorYellow"   Width="32" Height="32" CornerRadius="16" Background="#FFE066" Tag="#FFE066"   Click="FontColor_Click" ToolTipService.ToolTip="Yellow"/>
+                                <Button x:Name="ColorGreen"    Width="32" Height="32" CornerRadius="16" Background="#90EE90" Tag="#90EE90"   Click="FontColor_Click" ToolTipService.ToolTip="Green"/>
+                                <Button x:Name="ColorCyan"     Width="32" Height="32" CornerRadius="16" Background="#7FFFD4" Tag="#7FFFD4"   Click="FontColor_Click" ToolTipService.ToolTip="Aqua"/>
+                                <Button x:Name="ColorOrange"   Width="32" Height="32" CornerRadius="16" Background="#FFA07A" Tag="#FFA07A"   Click="FontColor_Click" ToolTipService.ToolTip="Orange"/>
+                                <Button x:Name="ColorPink"     Width="32" Height="32" CornerRadius="16" Background="#FFB6C1" Tag="#FFB6C1"   Click="FontColor_Click" ToolTipService.ToolTip="Pink"/>
+                                <TextBlock x:Name="FontColorIndicator" VerticalAlignment="Center"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Text=""/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Save / Reset settings (plain row, not a card — an action bar, not a settings group) -->
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button x:Name="ColorWhite"    Width="32" Height="32" CornerRadius="16" Background="#F0F0F0" Tag="#F0F0F0"   Click="FontColor_Click" ToolTipService.ToolTip="White"/>
-                        <Button x:Name="ColorYellow"   Width="32" Height="32" CornerRadius="16" Background="#FFE066" Tag="#FFE066"   Click="FontColor_Click" ToolTipService.ToolTip="Yellow"/>
-                        <Button x:Name="ColorGreen"    Width="32" Height="32" CornerRadius="16" Background="#90EE90" Tag="#90EE90"   Click="FontColor_Click" ToolTipService.ToolTip="Green"/>
-                        <Button x:Name="ColorCyan"     Width="32" Height="32" CornerRadius="16" Background="#7FFFD4" Tag="#7FFFD4"   Click="FontColor_Click" ToolTipService.ToolTip="Aqua"/>
-                        <Button x:Name="ColorOrange"   Width="32" Height="32" CornerRadius="16" Background="#FFA07A" Tag="#FFA07A"   Click="FontColor_Click" ToolTipService.ToolTip="Orange"/>
-                        <Button x:Name="ColorPink"     Width="32" Height="32" CornerRadius="16" Background="#FFB6C1" Tag="#FFB6C1"   Click="FontColor_Click" ToolTipService.ToolTip="Pink"/>
-                        <TextBlock x:Name="FontColorIndicator" VerticalAlignment="Center"
-                                   FontSize="12"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Text=""/>
-                    </StackPanel>
-
-                    <!-- Save / Reset settings -->
-                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
                         <Button Content="💾 Save settings"
                                 Style="{ThemeResource AccentButtonStyle}"
                                 Click="SaveSettings_Click"/>
@@ -152,252 +199,373 @@
                                    Foreground="#4A90D9"/>
                     </StackPanel>
 
-                    <!-- Virtual scroll buttons (touch-friendly) -->
-                    <TextBlock Text="Virtual scroll buttons" Style="{ThemeResource CaptionTextBlockStyle}"
-                               Margin="0,4,0,0"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0" Content="▲" FontSize="28"
-                                HorizontalAlignment="Stretch" Height="64"
-                                Click="ScrollUp_Click"/>
-                        <Button Grid.Column="1" Content="▼" FontSize="28"
-                                HorizontalAlignment="Stretch" Height="64"
-                                Click="ScrollDown_Click"/>
-                    </Grid>
+                    <!-- Card: Virtual scroll buttons (touch-friendly) -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="VIRTUAL SCROLL BUTTONS" Style="{StaticResource CardTitleStyle}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Content="▲" FontSize="28"
+                                        HorizontalAlignment="Stretch" Height="64"
+                                        Click="ScrollUp_Click"/>
+                                <Button Grid.Column="1" Content="▼" FontSize="28"
+                                        HorizontalAlignment="Stretch" Height="64"
+                                        Click="ScrollDown_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
+
                 <!-- ── Q&A Tab ─────────────────────────────────────────── -->
-                <StackPanel x:Name="AiPanel" Spacing="12" Padding="16" Visibility="Collapsed">
+                <StackPanel x:Name="AiPanel" Spacing="14" Padding="16" Visibility="Collapsed">
 
-                    <!-- Record button (moved from overlay) -->
-                    <TextBlock Text="Recording" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <Button x:Name="ControllerRecordBtn"
-                                Content="● Record"
-                                Background="#4A90D9"
-                                Foreground="White"
-                                CornerRadius="20"
-                                Padding="16,8"
-                                Click="ControllerRecordBtn_Click"/>
-                        <TextBlock x:Name="ControllerQaStatus"
-                                   VerticalAlignment="Center"
-                                   FontSize="13"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap"/>
-                    </StackPanel>
+                    <!-- Card: Recording -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="RECORDING" Style="{StaticResource CardTitleStyle}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                <Button x:Name="ControllerRecordBtn"
+                                        Content="● Record"
+                                        Background="#4A90D9"
+                                        Foreground="White"
+                                        CornerRadius="20"
+                                        Padding="16,8"
+                                        Click="ControllerRecordBtn_Click"/>
+                                <TextBlock x:Name="ControllerQaStatus"
+                                           VerticalAlignment="Center"
+                                           FontSize="13"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
 
-                    <TextBlock Text="Chat provider" Style="{ThemeResource CaptionTextBlockStyle}" Margin="0,8,0,0"/>
-                    <ComboBox x:Name="ChatProviderCombo"
-                              HorizontalAlignment="Stretch"
-                              SelectionChanged="ChatProviderCombo_SelectionChanged"/>
+                    <!-- Card: AI provider -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="AI PROVIDER" Style="{StaticResource CardTitleStyle}"/>
 
-                    <TextBlock Text="Transcription provider" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <ComboBox x:Name="TranscriptionCombo"
-                              HorizontalAlignment="Stretch"
-                              SelectionChanged="TranscriptionCombo_SelectionChanged"/>
+                            <TextBlock Text="Chat provider" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <ComboBox x:Name="ChatProviderCombo"
+                                      HorizontalAlignment="Stretch"
+                                      SelectionChanged="ChatProviderCombo_SelectionChanged"/>
 
-                    <Grid Margin="0,4,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0"
-                                Content="⚙ Configure provider…"
-                                Click="ConfigureProvider_Click"
-                                HorizontalAlignment="Stretch"/>
-                        <Button Grid.Column="1"
-                                Content="Test"
-                                Margin="8,0,0,0"
-                                Click="TestConnection_Click"/>
-                    </Grid>
+                            <TextBlock Text="Transcription provider" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <ComboBox x:Name="TranscriptionCombo"
+                                      HorizontalAlignment="Stretch"
+                                      SelectionChanged="TranscriptionCombo_SelectionChanged"/>
 
-                    <TextBlock x:Name="ConnectionStatusText"
-                               Foreground="#4A90D9"
-                               FontSize="13"
-                               Margin="0,2,0,8"
-                               TextWrapping="Wrap"/>
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0"
+                                        Content="⚙ Configure provider…"
+                                        Click="ConfigureProvider_Click"
+                                        HorizontalAlignment="Stretch"/>
+                                <Button Grid.Column="1"
+                                        Content="Test"
+                                        Margin="8,0,0,0"
+                                        Click="TestConnection_Click"/>
+                            </Grid>
 
-                    <TextBlock Text="System prompt" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <TextBox x:Name="SystemPromptBox"
-                             AcceptsReturn="True"
-                             Height="80"
-                             TextWrapping="Wrap"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto"
-                             TextChanged="SystemPromptBox_TextChanged"/>
+                            <TextBlock x:Name="ConnectionStatusText"
+                                       Foreground="#4A90D9"
+                                       FontSize="13"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
 
-                    <TextBlock Text="Presentation context (injected into every answer)"
-                               Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <TextBox x:Name="PresentationContextBox"
-                             AcceptsReturn="True"
-                             Height="60"
-                             TextWrapping="Wrap"
-                             PlaceholderText="e.g. 'Presenting Azure AI Foundry to Contoso…'"
-                             TextChanged="PresentationContextBox_TextChanged"/>
+                    <!-- Card: Prompts -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="PROMPTS" Style="{StaticResource CardTitleStyle}"/>
 
-                    <TextBlock Text="Whisper local model path (optional — blank = cloud API)"
-                               Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="WhisperModelBox"
-                                 Grid.Column="0"
-                                 PlaceholderText="C:\models\ggml-base.en.bin"
-                                 TextChanged="WhisperModelBox_TextChanged"/>
-                        <Button Grid.Column="1"
-                                Content="Browse"
-                                Margin="8,0,0,0"
-                                Click="BrowseWhisperModel_Click"/>
-                    </Grid>
+                            <TextBlock Text="System prompt" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBox x:Name="SystemPromptBox"
+                                     AcceptsReturn="True"
+                                     Height="80"
+                                     TextWrapping="Wrap"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                     TextChanged="SystemPromptBox_TextChanged"/>
+
+                            <TextBlock Text="Presentation context (injected into every answer)"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBox x:Name="PresentationContextBox"
+                                     AcceptsReturn="True"
+                                     Height="60"
+                                     TextWrapping="Wrap"
+                                     PlaceholderText="e.g. 'Presenting Azure AI Foundry to Contoso…'"
+                                     TextChanged="PresentationContextBox_TextChanged"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Whisper model -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="WHISPER MODEL" Style="{StaticResource CardTitleStyle}"/>
+
+                            <TextBlock Text="Local model path (optional — blank = cloud API)"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="WhisperModelBox"
+                                         Grid.Column="0"
+                                         PlaceholderText="C:\models\ggml-base.en.bin"
+                                         TextChanged="WhisperModelBox_TextChanged"/>
+                                <Button Grid.Column="1"
+                                        Content="Browse"
+                                        Margin="8,0,0,0"
+                                        Click="BrowseWhisperModel_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- ── Settings Tab ────────────────────────────────────── -->
-                <StackPanel x:Name="SettingsPanel" Spacing="12" Padding="16" Visibility="Collapsed">
+                <StackPanel x:Name="SettingsPanel" Spacing="14" Padding="16" Visibility="Collapsed">
 
-                    <TextBlock Text="Audio — Recording source" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <ComboBox x:Name="AudioSourceCombo"
-                              HorizontalAlignment="Stretch"
-                              SelectionChanged="AudioSourceCombo_SelectionChanged">
-                        <ComboBoxItem Content="Microphone" Tag="microphone"/>
-                        <ComboBoxItem Content="System audio (loopback)" Tag="system"/>
-                        <ComboBoxItem Content="Both (mic + system)" Tag="both"/>
-                    </ComboBox>
+                    <!-- Card: Audio source -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="AUDIO SOURCE" Style="{StaticResource CardTitleStyle}"/>
 
-                    <TextBlock Text="Input device (microphone)" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <ComboBox x:Name="InputDeviceCombo"
-                              HorizontalAlignment="Stretch"
-                              SelectionChanged="InputDeviceCombo_SelectionChanged"
-                              PlaceholderText="Default system microphone"/>
+                            <TextBlock Text="Recording source" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <ComboBox x:Name="AudioSourceCombo"
+                                      HorizontalAlignment="Stretch"
+                                      SelectionChanged="AudioSourceCombo_SelectionChanged">
+                                <ComboBoxItem Content="Microphone" Tag="microphone"/>
+                                <ComboBoxItem Content="System audio (loopback)" Tag="system"/>
+                                <ComboBoxItem Content="Both (mic + system)" Tag="both"/>
+                            </ComboBox>
 
-                    <TextBlock Text="Output device" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <ComboBox x:Name="OutputDeviceCombo"
-                              HorizontalAlignment="Stretch"
-                              SelectionChanged="OutputDeviceCombo_SelectionChanged"
-                              PlaceholderText="Default system output"/>
+                            <TextBlock Text="Input device (microphone)" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <ComboBox x:Name="InputDeviceCombo"
+                                      HorizontalAlignment="Stretch"
+                                      SelectionChanged="InputDeviceCombo_SelectionChanged"
+                                      PlaceholderText="Default system microphone"/>
 
-                    <Button Content="↺ Refresh device list"
-                            Margin="0,4,0,0"
-                            Click="RefreshDevices_Click"/>
+                            <TextBlock Text="Output device" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <ComboBox x:Name="OutputDeviceCombo"
+                                      HorizontalAlignment="Stretch"
+                                      SelectionChanged="OutputDeviceCombo_SelectionChanged"
+                                      PlaceholderText="Default system output"/>
 
-                    <TextBlock Text="Voice scroll — sensitivity threshold" Style="{ThemeResource CaptionTextBlockStyle}"
-                               Margin="0,8,0,0"/>
-                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextWrapping="Wrap">
-                        Lower = more sensitive (scrolls with quiet speech). Higher = only loud speech triggers scroll.
-                    </TextBlock>
-                    <Slider x:Name="VoiceThresholdSlider"
-                            ValueChanged="VoiceThresholdSlider_ValueChanged"/>
-                    <TextBlock x:Name="VoiceThresholdValue"
-                               FontSize="12"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <Button Content="↺ Refresh device list"
+                                    Click="RefreshDevices_Click"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Voice scroll sensitivity -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="VOICE SCROLL SENSITIVITY" Style="{StaticResource CardTitleStyle}"/>
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextWrapping="Wrap">
+                                Lower = more sensitive (scrolls with quiet speech). Higher = only loud speech triggers scroll.
+                            </TextBlock>
+                            <Slider x:Name="VoiceThresholdSlider"
+                                    ValueChanged="VoiceThresholdSlider_ValueChanged"/>
+                            <TextBlock x:Name="VoiceThresholdValue"
+                                       FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Theme -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="THEME" Style="{StaticResource CardTitleStyle}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="20">
+                                <RadioButton x:Name="ThemeSystemRadio" Content="System" Tag="System" Checked="ThemeRadioChanged"/>
+                                <RadioButton x:Name="ThemeLightRadio"  Content="Light"  Tag="Light"  Checked="ThemeRadioChanged"/>
+                                <RadioButton x:Name="ThemeDarkRadio"   Content="Dark"   Tag="Dark"   Checked="ThemeRadioChanged"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- ── App Stealth Tab ─────────────────────────────────── -->
-                <StackPanel x:Name="StealthPanel" Spacing="12" Padding="16" Visibility="Collapsed">
+                <StackPanel x:Name="StealthPanel" Spacing="14" Padding="16" Visibility="Collapsed">
 
-                    <TextBlock Text="Select a window to embed" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               FontSize="12" TextWrapping="Wrap">
-                        Embeds any running app into a stealth container with
-                        WDA_EXCLUDEFROMCAPTURE. The app runs normally inside the container —
-                        you can interact with it — but the client doesn't see it in screen share.
-                        Works best with Win32/WPF apps. Chromium-based apps may vary.
-                    </TextBlock>
+                    <!-- Card: App Stealth -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="APP STEALTH" Style="{StaticResource CardTitleStyle}"/>
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       FontSize="12" TextWrapping="Wrap">
+                                Embeds any running app into a stealth container with
+                                WDA_EXCLUDEFROMCAPTURE. The app runs normally inside the container —
+                                you can interact with it — but the client doesn't see it in screen share.
+                                Works best with Win32/WPF apps. Chromium-based apps may vary.
+                            </TextBlock>
 
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <ComboBox x:Name="WindowListCombo"
-                                  Grid.Column="0"
-                                  HorizontalAlignment="Stretch"
-                                  PlaceholderText="Select a window…"
-                                  SelectionChanged="WindowListCombo_SelectionChanged"/>
-                        <Button Grid.Column="1"
-                                Content="↺"
-                                Margin="8,0,0,0"
-                                ToolTipService.ToolTip="Refresh window list"
-                                Click="RefreshWindows_Click"/>
-                    </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ComboBox x:Name="WindowListCombo"
+                                          Grid.Column="0"
+                                          HorizontalAlignment="Stretch"
+                                          PlaceholderText="Select a window…"
+                                          SelectionChanged="WindowListCombo_SelectionChanged"/>
+                                <Button Grid.Column="1"
+                                        Content="↺"
+                                        Margin="8,0,0,0"
+                                        ToolTipService.ToolTip="Refresh window list"
+                                        Click="RefreshWindows_Click"/>
+                            </Grid>
 
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button x:Name="EmbedBtn"
-                                Content="⊕ Embed in container"
-                                IsEnabled="False"
-                                Style="{ThemeResource AccentButtonStyle}"
-                                Click="EmbedBtn_Click"
-                                ToolTipService.ToolTip="Re-parent the selected window into a stealth container"/>
-                        <Button x:Name="ReleaseEmbedBtn"
-                                Content="⊖ Release"
-                                Visibility="Collapsed"
-                                Click="ReleaseEmbedBtn_Click"/>
-                        <TextBlock x:Name="StealthStatusText"
-                                   VerticalAlignment="Center"
-                                   FontSize="12"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap"/>
-                    </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="EmbedBtn"
+                                        Content="⊕ Embed in container"
+                                        IsEnabled="False"
+                                        Style="{ThemeResource AccentButtonStyle}"
+                                        Click="EmbedBtn_Click"
+                                        ToolTipService.ToolTip="Re-parent the selected window into a stealth container"/>
+                                <Button x:Name="ReleaseEmbedBtn"
+                                        Content="⊖ Release"
+                                        Visibility="Collapsed"
+                                        Click="ReleaseEmbedBtn_Click"/>
+                                <TextBlock x:Name="StealthStatusText"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- ── About Tab ─────────────────────────────────────── -->
-                <StackPanel x:Name="AboutPanel" Spacing="12" Padding="16" Visibility="Collapsed">
-                    <TextBlock Text="onAIr Native"
-                               FontSize="24" FontWeight="Bold"/>
-                    <TextBlock x:Name="VersionText"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    <TextBlock Text="Transparent teleprompter overlay · WinUI 3 · whisper.net · NAudio"
-                               TextWrapping="Wrap"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    <TextBlock x:Name="AuthorsText" TextWrapping="Wrap"/>
-                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               FontSize="12" TextWrapping="Wrap">
-                        github.com/souz4rafael/onair-native
-                    </TextBlock>
-                    <HyperlinkButton Content="View source on GitHub"
-                                     NavigateUri="https://github.com/souz4rafael/onair-native"/>
+                <StackPanel x:Name="AboutPanel" Spacing="14" Padding="16" Visibility="Collapsed">
 
-                    <TextBlock Text="Keyboard shortcuts" FontWeight="SemiBold" Margin="0,12,0,0"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="16"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition/>
-                            <RowDefinition/>
-                            <RowDefinition/>
-                            <RowDefinition/>
-                            <RowDefinition/>
-                            <RowDefinition/>
-                            <RowDefinition/>
-                        </Grid.RowDefinitions>
-                        <!-- Row 0 -->
-                        <TextBlock Grid.Row="0" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+PgUp"/>
-                        <TextBlock Grid.Row="0" Grid.Column="2" FontSize="12" Text="Scroll script up (manual mode)" TextWrapping="Wrap"/>
-                        <!-- Row 1 -->
-                        <TextBlock Grid.Row="1" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+PgDn"/>
-                        <TextBlock Grid.Row="1" Grid.Column="2" FontSize="12" Text="Scroll script down (manual mode)" TextWrapping="Wrap"/>
-                        <!-- Row 2 -->
-                        <TextBlock Grid.Row="2" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+Home"/>
-                        <TextBlock Grid.Row="2" Grid.Column="2" FontSize="12" Text="Toggle overlay locked / unlocked" TextWrapping="Wrap"/>
-                        <!-- Row 3 -->
-                        <TextBlock Grid.Row="3" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+R"/>
-                        <TextBlock Grid.Row="3" Grid.Column="2" FontSize="12" Text="Start / stop Q&amp;A recording" TextWrapping="Wrap"/>
-                        <!-- Row 4 -->
-                        <TextBlock Grid.Row="4" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+M"/>
-                        <TextBlock Grid.Row="4" Grid.Column="2" FontSize="12" Text="Switch mode: Script ↔ Q&amp;A" TextWrapping="Wrap"/>
-                        <!-- Row 5 -->
-                        <TextBlock Grid.Row="5" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+O"/>
-                        <TextBlock Grid.Row="5" Grid.Column="2" FontSize="12" Text="Open script file picker" TextWrapping="Wrap"/>
-                        <!-- Row 6 -->
-                        <TextBlock Grid.Row="6" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+,"/>
-                        <TextBlock Grid.Row="6" Grid.Column="2" FontSize="12" Text="Bring the Controller to the front" TextWrapping="Wrap"/>
-                    </Grid>
+                    <!-- Identity block (no card — the heading is header enough) -->
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="onAIr"
+                                   FontSize="24" FontWeight="Bold"/>
+                        <TextBlock x:Name="VersionText"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <TextBlock Text="Transparent teleprompter Box · WinUI 3 · whisper.net · NAudio"
+                                   TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <TextBlock x:Name="AuthorsText" TextWrapping="Wrap"/>
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   FontSize="12" TextWrapping="Wrap">
+                            github.com/souz4rafael/onair-native
+                        </TextBlock>
+                        <HyperlinkButton Content="View source on GitHub"
+                                         NavigateUri="https://github.com/souz4rafael/onair-native"/>
+                    </StackPanel>
+
+                    <!-- Card: Updates -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="UPDATES" Style="{StaticResource CardTitleStyle}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button x:Name="CheckUpdatesBtn"
+                                        Content="Check for Updates"
+                                        Click="CheckUpdatesButton_Click"/>
+                                <TextBlock x:Name="UpdateStatusTextBlock"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+                            <StackPanel x:Name="UpdateDownloadPanel" Spacing="8" Visibility="Collapsed">
+                                <Button x:Name="DownloadUpdateBtn"
+                                        Content="⬇ Download &amp; Install"
+                                        Click="DownloadUpdateButton_Click"/>
+                                <ProgressBar x:Name="UpdateProgressBar"
+                                             Minimum="0" Maximum="1"
+                                             Visibility="Collapsed"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Keyboard shortcuts -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="KEYBOARD SHORTCUTS" Style="{StaticResource CardTitleStyle}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                </Grid.RowDefinitions>
+                                <!-- Row 0 -->
+                                <TextBlock Grid.Row="0" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+PgUp"/>
+                                <TextBlock Grid.Row="0" Grid.Column="2" FontSize="12" Text="Scroll script up (manual mode)" TextWrapping="Wrap"/>
+                                <!-- Row 1 -->
+                                <TextBlock Grid.Row="1" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+PgDn"/>
+                                <TextBlock Grid.Row="1" Grid.Column="2" FontSize="12" Text="Scroll script down (manual mode)" TextWrapping="Wrap"/>
+                                <!-- Row 2 -->
+                                <TextBlock Grid.Row="2" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+Home"/>
+                                <TextBlock Grid.Row="2" Grid.Column="2" FontSize="12" Text="Lock / unlock Box" TextWrapping="Wrap"/>
+                                <!-- Row 3 -->
+                                <TextBlock Grid.Row="3" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+R"/>
+                                <TextBlock Grid.Row="3" Grid.Column="2" FontSize="12" Text="Start / stop Q&amp;A recording" TextWrapping="Wrap"/>
+                                <!-- Row 4 -->
+                                <TextBlock Grid.Row="4" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+O"/>
+                                <TextBlock Grid.Row="4" Grid.Column="2" FontSize="12" Text="Open script file picker" TextWrapping="Wrap"/>
+                                <!-- Row 5 -->
+                                <TextBlock Grid.Row="5" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+]"/>
+                                <TextBlock Grid.Row="5" Grid.Column="2" FontSize="12" Text="Increase Box opacity" TextWrapping="Wrap"/>
+                                <!-- Row 6 -->
+                                <TextBlock Grid.Row="6" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+["/>
+                                <TextBlock Grid.Row="6" Grid.Column="2" FontSize="12" Text="Decrease Box opacity" TextWrapping="Wrap"/>
+                                <!-- Row 7 -->
+                                <TextBlock Grid.Row="7" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+V"/>
+                                <TextBlock Grid.Row="7" Grid.Column="2" FontSize="12" Text="Open / hide Box" TextWrapping="Wrap"/>
+                                <!-- Row 8 -->
+                                <TextBlock Grid.Row="8" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+S"/>
+                                <TextBlock Grid.Row="8" Grid.Column="2" FontSize="12" Text="Hide / show Box in share" TextWrapping="Wrap"/>
+                                <!-- Row 9 -->
+                                <TextBlock Grid.Row="9" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+H"/>
+                                <TextBlock Grid.Row="9" Grid.Column="2" FontSize="12" Text="Hide / show Controller in share" TextWrapping="Wrap"/>
+                                <!-- Row 10 -->
+                                <TextBlock Grid.Row="10" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+U"/>
+                                <TextBlock Grid.Row="10" Grid.Column="2" FontSize="12" Text="Release the App Stealth container" TextWrapping="Wrap"/>
+                                <!-- Row 11 -->
+                                <TextBlock Grid.Row="11" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+."/>
+                                <TextBlock Grid.Row="11" Grid.Column="2" FontSize="12" Text="Increase Auto-scroll speed" TextWrapping="Wrap"/>
+                                <!-- Row 12 -->
+                                <TextBlock Grid.Row="12" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+,"/>
+                                <TextBlock Grid.Row="12" Grid.Column="2" FontSize="12" Text="Decrease Auto-scroll speed" TextWrapping="Wrap"/>
+                                <!-- Row 13 -->
+                                <TextBlock Grid.Row="13" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+="/>
+                                <TextBlock Grid.Row="13" Grid.Column="2" FontSize="12" Text="Increase font size" TextWrapping="Wrap"/>
+                                <!-- Row 14 -->
+                                <TextBlock Grid.Row="14" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+-"/>
+                                <TextBlock Grid.Row="14" Grid.Column="2" FontSize="12" Text="Decrease font size" TextWrapping="Wrap"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
               </Grid>
             </ScrollViewer>
@@ -408,36 +576,47 @@
                 BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                 BorderThickness="0,1,0,0"
                 Padding="8,6">
-            <StackPanel Spacing="6">
-                <!-- Overlay visibility / move-lock controls (affect this PC only) -->
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <ToggleButton x:Name="OverlayToggle"
-                                  FontSize="12"
-                                  Checked="OverlayToggle_Checked"
-                                  Unchecked="OverlayToggle_Unchecked"/>
+            <Border Style="{StaticResource CardBorderStyle}" Padding="10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                    <ToggleButton x:Name="LockToggle"
-                                  FontSize="12"
-                                  Checked="LockToggle_Checked"
-                                  Unchecked="LockToggle_Unchecked"/>
-                </StackPanel>
+                    <!-- Left: the 3 Box controls (this PC visibility, lock, and share visibility) -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">
+                        <ToggleButton x:Name="OverlayToggle"
+                                      Content="📦 Open Box"
+                                      FontSize="12"
+                                      ToolTipService.ToolTip="Show or hide the Box on this PC"
+                                      Checked="OverlayToggle_Checked"
+                                      Unchecked="OverlayToggle_Unchecked"/>
 
-                <!-- Screen-share / recording protection controls -->
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <!-- Overlay (teleprompter) screen-share protection -->
-                    <ToggleButton x:Name="OverlayProtectToggle"
-                                  FontSize="12"
-                                  Checked="OverlayProtectToggle_Checked"
-                                  Unchecked="OverlayProtectToggle_Unchecked"/>
+                        <ToggleButton x:Name="LockToggle"
+                                      Content="🔒 Lock Box"
+                                      FontSize="12"
+                                      ToolTipService.ToolTip="Lock or unlock the Box's position and size"
+                                      Checked="LockToggle_Checked"
+                                      Unchecked="LockToggle_Unchecked"/>
 
-                    <!-- Controller screen-share protection -->
+                        <ToggleButton x:Name="OverlayProtectToggle"
+                                      Content="🙈 Hide Box"
+                                      FontSize="12"
+                                      ToolTipService.ToolTip="Hide or show the Box while screen sharing"
+                                      Checked="OverlayProtectToggle_Checked"
+                                      Unchecked="OverlayProtectToggle_Unchecked"/>
+                    </StackPanel>
+
+                    <!-- Right: Controller screen-share protection -->
                     <ToggleButton x:Name="ProtectToggle"
-                                  Content="🙈 Hide from capture"
+                                  Grid.Column="1"
+                                  Content="🙈 Hide Controller"
                                   FontSize="12"
+                                  ToolTipService.ToolTip="Hide or show the Controller while screen sharing"
                                   Checked="ProtectToggle_Checked"
                                   Unchecked="ProtectToggle_Unchecked"/>
-                </StackPanel>
-            </StackPanel>
+                </Grid>
+            </Border>
         </Border>
     </Grid>
 </Window>

@@ -58,6 +58,9 @@ public sealed partial class OverlayWindow : Window
                 case nameof(OverlayViewModel.FontColor):
                     ScriptTextBlock.Foreground = ParseHexColor(ViewModel.FontColor);
                     break;
+                case nameof(OverlayViewModel.FontSize):
+                    ScriptTextBlock.FontSize = ViewModel.FontSize;
+                    break;
                 case nameof(OverlayViewModel.IsVoiceActive):
                     if (ViewModel.ScrollMode == ViewModels.ScrollMode.Voice)
                     {
@@ -76,8 +79,9 @@ public sealed partial class OverlayWindow : Window
             }
         };
 
-        // Seed initial text
-        ScriptTextBlock.Text = ViewModel.ScriptText;
+        // Seed initial text/appearance (persisted config values, may differ from XAML defaults)
+        ScriptTextBlock.Text     = ViewModel.ScriptText;
+        ScriptTextBlock.FontSize = ViewModel.FontSize;
 
         Activated += OnFirstActivated;
     }
@@ -93,7 +97,7 @@ public sealed partial class OverlayWindow : Window
 
         var logDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "onAIr Native");
+            "onAIr");
         Directory.CreateDirectory(logDir);
         var logPath = Path.Combine(logDir, "overlay-init.log");
 
@@ -112,9 +116,14 @@ public sealed partial class OverlayWindow : Window
             WindowService.RemoveTitleBar(this);
             File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} title bar removed\n");
 
-            // Restore saved geometry
+            // Restore saved size, but always position at the primary monitor's
+            // top-left corner (0,0) rather than the last saved X/Y. A saved position
+            // can point at a monitor that's no longer connected or a different
+            // multi-monitor arrangement, which made the overlay appear to not show
+            // up at all (it was rendering off-screen). Width/Height are still
+            // restored since those aren't affected by monitor layout changes.
             var saved = App.Config.Current.OverlayWindow;
-            WindowService.SetPosition(this, saved.X, saved.Y);
+            WindowService.SetPosition(this, 0, 0);
             WindowService.SetSize(this, saved.Width, saved.Height);
 
             // Win32: always-on-top, no-taskbar-icon, transparent background
@@ -240,8 +249,12 @@ public sealed partial class OverlayWindow : Window
 
     public void SaveGeometry()
     {
-        var (x, y, w, h) = WindowService.GetGeometry(this);
+        // Position is intentionally not persisted — the overlay always reopens at
+        // (0,0) (see OnFirstActivated) so a stale position from a disconnected
+        // monitor or different multi-monitor layout can't leave it off-screen.
+        // Only the size is remembered.
+        var (_, _, w, h) = WindowService.GetGeometry(this);
         var s = App.Config.Current.OverlayWindow;
-        s.X = x; s.Y = y; s.Width = w; s.Height = h;
+        s.Width = w; s.Height = h;
     }
 }

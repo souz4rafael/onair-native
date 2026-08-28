@@ -76,6 +76,7 @@ public partial class OverlayViewModel : ObservableObject
     partial void OnScrollModeChanged(ScrollMode value)
     {
         StopAutoScroll();
+        StopVoiceScrollTimer();
         _audio.StopVoiceMonitor();
         IsVoiceActive = false;
 
@@ -117,16 +118,44 @@ public partial class OverlayViewModel : ObservableObject
     }
 
     // ── Voice scroll (RMS microphone monitoring) ──────────────────────────────
+    //
+    // Continuous timer, same shape as Auto mode, but gated on IsVoiceActive and
+    // driven by its own VoiceScrollSpeed setting instead of ScrollSpeed. Previously
+    // this scrolled directly from the audio DataAvailable callback with a "1 scroll
+    // every 3 callbacks" debounce baked in — that throttle plus sharing Auto's speed
+    // value meant Voice mode topped out at a fraction of Auto's max speed even with
+    // the slider maxed out. Decoupling the speed AND removing the debounce (voice
+    // detection now only toggles IsVoiceActive; the timer does the actual scrolling
+    // every tick while active) fixes both problems.
 
-    // Debounce: accumulate voice detections and scroll only every N callbacks
-    private int _voiceCallbackCount;
-    private const int VoiceScrollEvery = 3; // scroll once every 3 audio callbacks
+    private DispatcherTimer? _voiceTimer;
 
     private void StartVoiceScroll()
     {
-        _voiceCallbackCount = 0;
+        _voiceTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(50),
+        };
+        _voiceTimer.Tick += VoiceScrollTick;
+        _voiceTimer.Start();
+
         // Pass the configured device ID so the correct mic is used
         _audio.StartVoiceMonitor(OnVoiceRms, _config.Current.AudioDeviceId);
+    }
+
+    private void StopVoiceScrollTimer()
+    {
+        if (_voiceTimer is null) return;
+        _voiceTimer.Stop();
+        _voiceTimer.Tick -= VoiceScrollTick;
+        _voiceTimer = null;
+    }
+
+    private void VoiceScrollTick(object? sender, object e)
+    {
+        if (!IsVoiceActive) return;
+        var pxPerTick = Math.Max(1, _config.Current.Appearance.VoiceScrollSpeed / 10);
+        Scroll(pxPerTick);
     }
 
     private void OnVoiceRms(float rms)
@@ -134,37 +163,9 @@ public partial class OverlayViewModel : ObservableObject
         var threshold = (float)_config.Current.Appearance.VoiceRmsThreshold;
         bool active   = rms > threshold;
 
-        // Debounce: scroll once every VoiceScrollEvery callbacks while voice is detected
-        if (active)
-        {
-            _voiceCallbackCount++;
-            if (_voiceCallbackCount >= VoiceScrollEvery)
-            {
-                _voiceCallbackCount = 0;
-                _uiQueue.TryEnqueue(() =>
-                {
-                    Scroll(Math.Max(1, _config.Current.Appearance.ScrollSpeed / 10));
-                    IsVoiceActive = true;
-                    MicLevel = Math.Round(rms, 1);
-                });
-            }
-        }
-        else
-        {
-            _voiceCallbackCount = 0;
-            if (IsVoiceActive || MicLevel > 0)
-                _uiQueue.TryEnqueue(() => { IsVoiceActive = false; MicLevel = Math.Round(rms, 1); });
-        }
+        if (active != IsVoiceActive || MicLevel != Math.Round(rms, 1))
+            _uiQueue.TryEnqueue(() => { IsVoiceActive = active; MicLevel = Math.Round(rms, 1); });
     }
-
-    // ── Mode cycling (Ctrl+Alt+M) ─────────────────────────────────────────────
-
-    public void CycleMode() => CurrentMode = CurrentMode switch
-    {
-        OverlayMode.Script => OverlayMode.QA,
-        OverlayMode.QA     => OverlayMode.Script,
-        _                  => OverlayMode.Script,
-    };
 
     // ── Move mode (Ctrl+Alt+Home) ─────────────────────────────────────────────
 
@@ -245,7 +246,11 @@ public partial class OverlayViewModel : ObservableObject
         {
             // Stop voice scroll if active (can't monitor + record simultaneously)
             if (ScrollMode == ScrollMode.Voice)
+            {
+                StopVoiceScrollTimer();
                 _audio.StopVoiceMonitor();
+                IsVoiceActive = false;
+            }
 
             CurrentMode = OverlayMode.QA;
             QaQuestion  = "";
@@ -274,6 +279,7 @@ public partial class OverlayViewModel : ObservableObject
     public void Cleanup()
     {
         StopAutoScroll();
+        StopVoiceScrollTimer();
         _audio.StopVoiceMonitor();
     }
 }

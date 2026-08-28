@@ -242,14 +242,22 @@ internal static partial class NativeMethods
 
     // ── Virtual key codes ────────────────────────────────────────────────────
 
-    internal const uint VK_PRIOR  = 0x21;  // Page Up
-    internal const uint VK_NEXT   = 0x22;  // Page Down
-    internal const uint VK_HOME   = 0x24;
-    internal const uint VK_INSERT = 0x2D;
-    internal const uint VK_M      = 0x4D;
-    internal const uint VK_O      = 0x4F;
-    internal const uint VK_R      = 0x52;
-    internal const uint VK_OEM_COMMA = 0xBC;  // ',' on a US layout
+    internal const uint VK_PRIOR      = 0x21;  // Page Up
+    internal const uint VK_NEXT       = 0x22;  // Page Down
+    internal const uint VK_HOME       = 0x24;
+    internal const uint VK_INSERT     = 0x2D;
+    internal const uint VK_H          = 0x48;
+    internal const uint VK_O          = 0x4F;
+    internal const uint VK_R          = 0x52;
+    internal const uint VK_S          = 0x53;
+    internal const uint VK_U          = 0x55;
+    internal const uint VK_V          = 0x56;
+    internal const uint VK_OEM_4      = 0xDB;  // '[' on a US layout
+    internal const uint VK_OEM_6      = 0xDD;  // ']' on a US layout
+    internal const uint VK_OEM_COMMA  = 0xBC;  // ',' on a US layout
+    internal const uint VK_OEM_PERIOD = 0xBE;  // '.' on a US layout
+    internal const uint VK_OEM_MINUS  = 0xBD;  // '-' on a US layout
+    internal const uint VK_OEM_PLUS   = 0xBB;  // '=' on a US layout
 
     // ── SetWindowDisplayAffinity ──────────────────────────────────────────────
 

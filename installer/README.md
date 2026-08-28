@@ -1,6 +1,6 @@
 # Installer (NSIS)
 
-Builds `onAIr-Native-Setup-<version>.exe`, a self-contained installer for onAIr Native.
+Builds `onAIr-Setup-<version>.exe`, a self-contained installer for onAIr.
 
 ## Prerequisites
 
@@ -30,7 +30,7 @@ Builds `onAIr-Native-Setup-<version>.exe`, a self-contained installer for onAIr 
 
 ## What the installer does
 
-- Installs the app (framework-dependent against the Windows App SDK, .NET self-contained) to `Program Files\onAIr Native`.
+- Installs the app (framework-dependent against the Windows App SDK, .NET self-contained) to `Program Files\onAIr`.
 - Runs `WindowsAppRuntimeInstall-x64.exe --quiet --force` so the Windows App Runtime is present (without it the app throws `XamlParseException` on launch).
 - Creates Start Menu + Desktop shortcuts and an Add/Remove Programs uninstall entry.
 

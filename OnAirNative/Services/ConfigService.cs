@@ -5,9 +5,7 @@ using OnAirNative.Models;
 namespace OnAirNative.Services;
 
 /// <summary>
-/// Loads and saves config.json to %LocalAppData%\onAIr Native\.
-/// Config format is intentionally close to the Electron v1.3 config.json
-/// to allow manual migration of credentials.
+/// Loads and saves config.json to %LocalAppData%\onAIr\.
 /// </summary>
 public class ConfigService
 {
@@ -34,11 +32,24 @@ public class ConfigService
 
     public ConfigService()
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "onAIr Native");
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var dir = Path.Combine(localAppData, "onAIr");
         Directory.CreateDirectory(dir);
         ConfigPath = Path.Combine(dir, "config.json");
+
+        // One-time migration: versions up to 1.0.5 stored config.json under the old
+        // "onAIr Native" folder name. Copy it over (don't delete the original) so
+        // existing installs keep their settings and API keys after upgrading.
+        var legacyConfigPath = Path.Combine(localAppData, "onAIr Native", "config.json");
+        if (!File.Exists(ConfigPath) && File.Exists(legacyConfigPath))
+        {
+            try { File.Copy(legacyConfigPath, ConfigPath); }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Config] Legacy migration failed: {ex.Message}");
+            }
+        }
+
         Load();
     }
 

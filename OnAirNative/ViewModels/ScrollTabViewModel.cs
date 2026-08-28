@@ -12,6 +12,7 @@ public partial class ScrollTabViewModel : ObservableObject
     [ObservableProperty] private string _loadedFileName = "No file loaded";
     [ObservableProperty] private int    _scrollStep;
     [ObservableProperty] private int    _scrollSpeed;
+    [ObservableProperty] private int    _voiceScrollSpeed;
     [ObservableProperty] private int    _selectedScrollModeIndex; // 0=Manual, 1=Auto, 2=Voice
     [ObservableProperty] private int    _fontSize;
     [ObservableProperty] private double _opacity;
@@ -22,10 +23,11 @@ public partial class ScrollTabViewModel : ObservableObject
         _overlay = overlay;
 
         var a = config.Current.Appearance;
-        ScrollStep    = a.ScrollStep;
-        ScrollSpeed   = a.ScrollSpeed;
-        FontSize      = a.FontSize;
-        Opacity       = a.Opacity / 100.0;
+        ScrollStep       = a.ScrollStep;
+        ScrollSpeed      = a.ScrollSpeed;
+        VoiceScrollSpeed = a.VoiceScrollSpeed;
+        FontSize         = a.FontSize;
+        Opacity          = a.Opacity / 100.0;
 
         overlay.PropertyChanged += (_, e) =>
         {
@@ -63,6 +65,12 @@ public partial class ScrollTabViewModel : ObservableObject
     partial void OnScrollSpeedChanged(int value)
     {
         _config.Current.Appearance.ScrollSpeed = value;
+        _config.Save();
+    }
+
+    partial void OnVoiceScrollSpeedChanged(int value)
+    {
+        _config.Current.Appearance.VoiceScrollSpeed = value;
         _config.Save();
     }
 

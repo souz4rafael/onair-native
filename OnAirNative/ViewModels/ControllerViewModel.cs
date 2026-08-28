@@ -12,6 +12,7 @@ public partial class ControllerViewModel : ObservableObject
 
     [ObservableProperty] private bool _controllerProtected;
     [ObservableProperty] private bool _overlayProtected;
+    [ObservableProperty] private string _theme = "System";
 
     private readonly ConfigService    _config;
     private readonly OverlayViewModel _overlay;
@@ -19,17 +20,19 @@ public partial class ControllerViewModel : ObservableObject
     public ControllerViewModel(
         ConfigService config,
         OverlayViewModel overlay,
-        AiChatService ai)
+        AiChatService ai,
+        UpdateService update)
     {
         _config  = config;
         _overlay = overlay;
 
         ControllerProtected = config.Current.ControllerProtected;
         OverlayProtected    = config.Current.OverlayProtected;
+        Theme               = config.Current.Theme;
 
         ScrollTab = new ScrollTabViewModel(config, overlay);
         AiTab     = new AiTabViewModel(config, ai);
-        AboutTab  = new AboutTabViewModel();
+        AboutTab  = new AboutTabViewModel(update);
     }
 
     partial void OnControllerProtectedChanged(bool value)
@@ -44,6 +47,12 @@ public partial class ControllerViewModel : ObservableObject
         OverlayProtectionChanged?.Invoke(this, value);
     }
 
+    partial void OnThemeChanged(string value)
+    {
+        _config.Current.Theme = value;
+        ThemeChanged?.Invoke(this, value);
+    }
+
     /// <summary>Raised when the Controller screen-share protection toggle changes.</summary>
     public event EventHandler<bool>? ControllerProtectionChanged;
 
@@ -52,4 +61,7 @@ public partial class ControllerViewModel : ObservableObject
     /// the teleprompter overlay is visible to viewers of a shared screen/recording.
     /// </summary>
     public event EventHandler<bool>? OverlayProtectionChanged;
+
+    /// <summary>Raised when the app theme changes ("System" | "Light" | "Dark").</summary>
+    public event EventHandler<string>? ThemeChanged;
 }
