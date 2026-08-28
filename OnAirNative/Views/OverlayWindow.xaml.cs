@@ -104,6 +104,10 @@ public sealed partial class OverlayWindow : Window
             _hwnd = WindowService.GetHwnd(this);
             ViewModel.Hwnd = _hwnd;
 
+            // Title bar is removed below, but the icon still shows in Task Manager,
+            // Alt-Tab (if ever unhidden) and Snap Assist thumbnails.
+            WindowService.SetWindowIcon(this);
+
             // Remove title bar — overlay is purely content
             WindowService.RemoveTitleBar(this);
             File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} title bar removed\n");

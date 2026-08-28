@@ -60,7 +60,7 @@ _Choose your audio input device (for recording and voice scroll), configure the 
 
 ### Overlay
 - **Transparent, frameless, always-on-top** — WinUI 3 + DWM compositor
-- **Hidden from screen share by default** — `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`
+- **Hidden from screen share by default** — `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`; toggle it off from the Controller footer to let viewers of your shared screen/recording see the overlay too
 - **Click-through mode** — keyboard and mouse pass to the window underneath; toggle with `Ctrl+Alt+Home`
 - **Mode label** in header — shows current mode (Script / Q&A); no clickable pills to distract
 - **Starts hidden** — only the Controller opens on launch; show the overlay when you're ready
@@ -89,7 +89,7 @@ _Choose your audio input device (for recording and voice scroll), configure the 
 - **Settings tab**: audio device + capture source selection, voice scroll sensitivity, threshold visualiser
 - **About tab**: version, hotkey reference, GitHub link
 - **Single instance**: launching the app again just brings the existing Controller forward
-- **Footer**: `👁 Overlay: visible/hidden` · `🔒 Overlay: locked/unlocked` · `🙈 Hide from capture`
+- **Footer**: `👁 Overlay: visible/hidden` · `🔒 Overlay: locked/unlocked` · `📽 Overlay: visible/hidden in share` · `🙈 Hide from capture`
 
 ### App Stealth container
 - Enumerate all visible windows (`EnumWindows`)

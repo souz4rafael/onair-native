@@ -11,6 +11,7 @@ public partial class ControllerViewModel : ObservableObject
     public AboutTabViewModel   AboutTab  { get; }
 
     [ObservableProperty] private bool _controllerProtected;
+    [ObservableProperty] private bool _overlayProtected;
 
     private readonly ConfigService    _config;
     private readonly OverlayViewModel _overlay;
@@ -24,6 +25,7 @@ public partial class ControllerViewModel : ObservableObject
         _overlay = overlay;
 
         ControllerProtected = config.Current.ControllerProtected;
+        OverlayProtected    = config.Current.OverlayProtected;
 
         ScrollTab = new ScrollTabViewModel(config, overlay);
         AiTab     = new AiTabViewModel(config, ai);
@@ -36,6 +38,18 @@ public partial class ControllerViewModel : ObservableObject
         ControllerProtectionChanged?.Invoke(this, value);
     }
 
+    partial void OnOverlayProtectedChanged(bool value)
+    {
+        _config.Current.OverlayProtected = value;
+        OverlayProtectionChanged?.Invoke(this, value);
+    }
+
     /// <summary>Raised when the Controller screen-share protection toggle changes.</summary>
     public event EventHandler<bool>? ControllerProtectionChanged;
+
+    /// <summary>
+    /// Raised when the overlay screen-share protection toggle changes. When false,
+    /// the teleprompter overlay is visible to viewers of a shared screen/recording.
+    /// </summary>
+    public event EventHandler<bool>? OverlayProtectionChanged;
 }

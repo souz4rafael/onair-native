@@ -19,6 +19,21 @@ public static partial class WindowService
     public static AppWindow GetAppWindow(Window window) =>
         window.AppWindow;
 
+    // ── Icon ──────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Sets the window's title bar / taskbar / Alt-Tab icon from app-icon.ico next
+    /// to the exe. Unpackaged WinUI 3 windows do not inherit the exe's embedded
+    /// icon resource automatically — each window must call AppWindow.SetIcon itself.
+    /// </summary>
+    public static void SetWindowIcon(Window window)
+    {
+        var exeDir  = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
+        var icoPath = Path.Combine(exeDir, "Assets", "app-icon.ico");
+        if (File.Exists(icoPath))
+            window.AppWindow.SetIcon(icoPath);
+    }
+
     // ── Show / Hide ────────────────────────────────────────────────────────────
 
     public static void ShowWindow(Window window) => window.AppWindow.Show(activateWindow: true);

@@ -408,37 +408,36 @@
                 BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                 BorderThickness="0,1,0,0"
                 Padding="8,6">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="8"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+            <StackPanel Spacing="6">
+                <!-- Overlay visibility / move-lock controls (affect this PC only) -->
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ToggleButton x:Name="OverlayToggle"
+                                  FontSize="12"
+                                  Checked="OverlayToggle_Checked"
+                                  Unchecked="OverlayToggle_Unchecked"/>
 
-                <!-- Overlay visibility toggle -->
-                <ToggleButton Grid.Column="0"
-                              x:Name="OverlayToggle"
-                              FontSize="12"
-                              Checked="OverlayToggle_Checked"
-                              Unchecked="OverlayToggle_Unchecked"/>
+                    <ToggleButton x:Name="LockToggle"
+                                  FontSize="12"
+                                  Checked="LockToggle_Checked"
+                                  Unchecked="LockToggle_Unchecked"/>
+                </StackPanel>
 
-                <!-- Overlay lock/unlock toggle -->
-                <ToggleButton Grid.Column="2"
-                              x:Name="LockToggle"
-                              FontSize="12"
-                              Checked="LockToggle_Checked"
-                              Unchecked="LockToggle_Unchecked"/>
+                <!-- Screen-share / recording protection controls -->
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <!-- Overlay (teleprompter) screen-share protection -->
+                    <ToggleButton x:Name="OverlayProtectToggle"
+                                  FontSize="12"
+                                  Checked="OverlayProtectToggle_Checked"
+                                  Unchecked="OverlayProtectToggle_Unchecked"/>
 
-                <!-- Controller screen-share protection -->
-                <ToggleButton Grid.Column="4"
-                              x:Name="ProtectToggle"
-                              Content="🙈 Hide from capture"
-                              FontSize="12"
-                              Checked="ProtectToggle_Checked"
-                              Unchecked="ProtectToggle_Unchecked"/>
-            </Grid>
+                    <!-- Controller screen-share protection -->
+                    <ToggleButton x:Name="ProtectToggle"
+                                  Content="🙈 Hide from capture"
+                                  FontSize="12"
+                                  Checked="ProtectToggle_Checked"
+                                  Unchecked="ProtectToggle_Unchecked"/>
+                </StackPanel>
+            </StackPanel>
         </Border>
     </Grid>
 </Window>

@@ -8,11 +8,28 @@
     <RootNamespace>OnAirNative</RootNamespace>
     <AssemblyName>OnAirNative</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Embeds the icon into OnAirNative.exe (Explorer, shortcuts, Alt-Tab default).
+         The windows also call AppWindow.SetIcon at runtime (see WindowService.SetWindowIcon)
+         since an unpackaged WinUI 3 window does not pick up the exe icon on its own. -->
+    <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
     <!-- Unpackaged deployment — no MSIX required -->
     <WindowsPackageType>None</WindowsPackageType>
+    <!--
+      Deploy the Windows App SDK app-local instead of depending on the machine-wide
+      "Microsoft.WindowsAppRuntime.2" MSIX framework package.
+
+      Why: framework-dependent WinUI 3 needs that package registered *for the user
+      running the app*. On managed/corporate machines the elevated installer either
+      registers it for the admin account that approved UAC (not the logged-on user),
+      or sideloading is blocked by policy outright. Either way the bootstrapper fails
+      and the app dies with a XamlParseException before showing a window — the exact
+      "installs fine, never opens" symptom. Self-contained removes the dependency.
+    -->
+    <SelfContained>true</SelfContained>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -74,10 +91,25 @@
   <Target Name="CopyVCRuntime" AfterTargets="Build;Publish">
     <PropertyGroup>
       <_VCRedistX64>$(VCToolsRedistDir)x64\Microsoft.VC143.CRT\</_VCRedistX64>
+      <!-- OpenMP runtime ships in a separate redist subfolder from the CRT -->
+      <_VCOpenMPRedistX64>$(VCToolsRedistDir)x64\Microsoft.VC143.OpenMP\</_VCOpenMPRedistX64>
     </PropertyGroup>
     <ItemGroup>
-      <_VCRuntimeFiles Condition="Exists('$(_VCRedistX64)')" Include="$(_VCRedistX64)vcruntime140.dll;$(_VCRedistX64)vcruntime140_1.dll;$(_VCRedistX64)msvcp140.dll" />
-      <_VCRuntimeFiles Condition="!Exists('$(_VCRedistX64)')" Include="$(WINDIR)\System32\vcruntime140.dll;$(WINDIR)\System32\vcruntime140_1.dll;$(WINDIR)\System32\msvcp140.dll" />
+      <!-- msvcp140_1/_2/_atomic_wait and concrt140 are pulled in by the self-contained
+           Windows App SDK native DLLs and by whisper.dll; shipping only the base three
+           still leaves a missing-DLL failure on machines without the redistributable. -->
+      <_VCRuntimeNames Include="vcruntime140.dll;vcruntime140_1.dll;msvcp140.dll;msvcp140_1.dll;msvcp140_2.dll;msvcp140_atomic_wait.dll;msvcp140_codecvt_ids.dll;concrt140.dll" />
+      <_VCRuntimeFiles Condition="Exists('$(_VCRedistX64)%(_VCRuntimeNames.Identity)')" Include="$(_VCRedistX64)%(_VCRuntimeNames.Identity)" />
+      <_VCRuntimeFiles Condition="!Exists('$(_VCRedistX64)%(_VCRuntimeNames.Identity)') and Exists('$(WINDIR)\System32\%(_VCRuntimeNames.Identity)')" Include="$(WINDIR)\System32\%(_VCRuntimeNames.Identity)" />
+
+      <!-- vcomp140.dll (OpenMP) is a confirmed static import of ggml-whisper.dll
+           (whisper.net's native inference engine uses OpenMP for parallel matrix
+           ops) — verified via PE import-table analysis. Without it, Whisper
+           transcription fails to load on a machine without the VC++ Redistributable,
+           even though the rest of the app runs fine. -->
+      <_VCOpenMPNames Include="vcomp140.dll" />
+      <_VCRuntimeFiles Condition="Exists('$(_VCOpenMPRedistX64)%(_VCOpenMPNames.Identity)')" Include="$(_VCOpenMPRedistX64)%(_VCOpenMPNames.Identity)" />
+      <_VCRuntimeFiles Condition="!Exists('$(_VCOpenMPRedistX64)%(_VCOpenMPNames.Identity)') and Exists('$(WINDIR)\System32\%(_VCOpenMPNames.Identity)')" Include="$(WINDIR)\System32\%(_VCOpenMPNames.Identity)" />
     </ItemGroup>
     <Copy SourceFiles="@(_VCRuntimeFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(_VCRuntimeFiles)' != ''" />
     <Copy SourceFiles="@(_VCRuntimeFiles)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="'$(PublishDir)' != '' and '@(_VCRuntimeFiles)' != ''" />

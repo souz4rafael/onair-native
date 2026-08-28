@@ -50,6 +50,9 @@ public sealed partial class ControllerWindow : Window
             _hwnd = WindowService.GetHwnd(this);
             File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} _hwnd={_hwnd}\n");
 
+            // Taskbar / title bar / Alt-Tab icon — not picked up automatically
+            WindowService.SetWindowIcon(this);
+
             // InitViewModel requires _hwnd to be valid (used by ControllerProtectionChanged handler)
             InitViewModel();
             File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} InitViewModel done\n");
@@ -85,6 +88,11 @@ public sealed partial class ControllerWindow : Window
             WindowService.SetContentProtection(_hwnd, App.Config.Current.ControllerProtected);
             ProtectToggle.IsChecked = App.Config.Current.ControllerProtected;
 
+            // Overlay screen-share protection state (applied by OverlayWindow itself on
+            // its own first-activate; here we just sync the footer toggle to match).
+            OverlayProtectToggle.IsChecked = App.Config.Current.OverlayProtected;
+            SyncOverlayProtectToggle(App.Config.Current.OverlayProtected);
+
             File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} OnFirstActivated done\n");
         }
         catch (Exception ex)
@@ -99,6 +107,11 @@ public sealed partial class ControllerWindow : Window
         ViewModel = new ControllerViewModel(App.Config, Overlay!.ViewModel, App.AiChat);
         ViewModel.ControllerProtectionChanged += (_, protect) =>
             WindowService.SetContentProtection(_hwnd, protect);
+        ViewModel.OverlayProtectionChanged += (_, protect) =>
+        {
+            if (Overlay is not null)
+                WindowService.SetContentProtection(WindowService.GetHwnd(Overlay), protect);
+        };
 
         ViewModel.ScrollTab.OpacityChanged += (_, opacity) =>
         {
@@ -431,6 +444,28 @@ public sealed partial class ControllerWindow : Window
 
     private void ProtectToggle_Unchecked(object sender, RoutedEventArgs e) =>
         ViewModel.ControllerProtected = false;
+
+    // ── Footer: overlay screen-share protection toggle ────────────────────────
+    // Lets the presenter reveal the teleprompter overlay to viewers of a shared
+    // screen/recording (default is hidden, same as before this toggle existed).
+
+    private void OverlayProtectToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        ViewModel.OverlayProtected = true;
+        SyncOverlayProtectToggle(true);
+    }
+
+    private void OverlayProtectToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        ViewModel.OverlayProtected = false;
+        SyncOverlayProtectToggle(false);
+    }
+
+    private void SyncOverlayProtectToggle(bool protect)
+    {
+        if (OverlayProtectToggle is null) return;
+        OverlayProtectToggle.Content = protect ? "🙈 Overlay: hidden in share" : "📽 Overlay: visible in share";
+    }
 
     // ── Q&A — Record button (moved from overlay) ──────────────────────────────
 

@@ -6,7 +6,7 @@ namespace OnAirNative.ViewModels;
 public partial class AboutTabViewModel : ObservableObject
 {
     public string AppName    => "onAIr Native";
-    public string Version    => "1.0.4";
+    public string Version    => "1.0.5";
     public string Authors    => "Rafael Souza (Microsoft) · GitHub Copilot (Claude Sonnet 4.6)";
     public string SourceUrl  => "https://github.com/souz4rafael/onair-native";
     public string BaseApp    => "Based on onAIr v1.3.0 (Electron)";

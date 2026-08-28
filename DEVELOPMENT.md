@@ -15,10 +15,10 @@ Use this file to resume development in a new session. Tell Copilot:
   dotnet build OnAirNative\OnAirNative.csproj -c Debug
   # exe: OnAirNative\bin\Debug\net8.0-windows10.0.19041.0\OnAirNative.exe
   ```
-- **Current version:** 1.0.4 — bump it in **two** places, they must stay in sync:
+- **Current version:** 1.0.5 — bump it in **two** places, they must stay in sync:
   `OnAirNative/ViewModels/AboutTabViewModel.cs` (`Version`) and
   `installer/onair-native.nsi` (`PRODUCT_VERSION`).
-- **Releases:** https://github.com/souz4rafael/onair-native/releases (latest published: v1.0.3)
+- **Releases:** https://github.com/souz4rafael/onair-native/releases (latest published: v1.0.5)
 - **Stack:** WinUI 3 (Windows App SDK 2.1.3), .NET 8, NAudio 2.2.1, whisper.net 1.7.3,
   CommunityToolkit.Mvvm 8.3.2, System.Security.Cryptography.ProtectedData 8.0.0
 
@@ -66,7 +66,7 @@ Services/
 | **Settings** | Audio device selector, capture source (mic / system / both), voice threshold slider |
 | **About** | Version, hotkeys, GitHub link |
 
-**Footer:** Overlay visible/hidden toggle · Overlay locked/unlocked toggle · Hide controller from capture
+**Footer:** Overlay visible/hidden toggle · Overlay locked/unlocked toggle · Overlay visible/hidden **in share** toggle (`OverlayProtected`) · Hide controller from capture
 
 ---
 
@@ -132,6 +132,7 @@ channels × 0.8 gain) — correct format, correct pacing, no clipping.
 7. **WebView2 does not work in WS_EX_LAYERED windows** (the overlay) → Browser mode was removed
 8. **Exceptions that escape a WndProc crash the CLR** with `ExecutionEngineException` → always try/catch in every WndProc
 9. **`_populatingUi` flag is CRITICAL** → slider `ValueChanged` overwrites config during UI init → guard all handlers with `if (_populatingUi) return;`
+10. **Unpackaged windows don't inherit the exe icon** → an `<ApplicationIcon>` in the csproj alone is not enough; each `Window` must call `AppWindow.SetIcon(path)` itself (see `WindowService.SetWindowIcon`) or the taskbar/title bar/Alt-Tab show a generic icon
 
 ---
 
@@ -162,6 +163,16 @@ Limited for: Chrome/Edge/modern Chromium (DirectComposition surfaces bypass the 
 - Browser mode fully removed — `Models/QuickLink.cs` deleted, `AppConfig.QuickLinks` dropped,
   stale XAML placeholders and doc-comments cleaned up.
 - API keys encrypted at rest with DPAPI (`SecretProtector`).
+- Taskbar/title bar/Alt-Tab icon (`WindowService.SetWindowIcon`, called from both windows'
+  `OnFirstActivated`) + `<ApplicationIcon>` in the csproj — unpackaged WinUI 3 windows do not pick
+  up the exe's icon on their own, so it was never showing (generic icon) until now.
+- Overlay screen-share protection is now toggleable at runtime: Controller footer button
+  `📽/🙈 Overlay: visible/hidden in share` (`ControllerViewModel.OverlayProtected` →
+  `OverlayProtectionChanged` event → `WindowService.SetContentProtection` on the overlay hwnd).
+  Previously `OverlayProtected` was only read once at startup with no UI to change it.
+- Full VC++ Redistributable app-local deployment, including `vcomp140.dll` (OpenMP, confirmed via
+  PE import-table analysis to be a genuine static dependency of `ggml-whisper.dll`) — see the
+  dependency note below.
 
 **Deliberately not doing**
 - `.txt` shell association ("Open with onAIr Native") — dropped, not worth the registry surface.
@@ -172,13 +183,55 @@ Limited for: Chrome/Edge/modern Chromium (DirectComposition surfaces bypass the 
 
 ---
 
+## Dependency checklist (why "installs fine, doesn't open" happens)
+
+The app is unpackaged + self-contained, so nothing beyond Windows 10 2004+ should be required —
+but three separate native layers each need their own files bundled, and missing any one of them
+reproduces the "installer runs, app never opens (or Whisper silently fails)" symptom with no
+visible error:
+
+1. **.NET 8 runtime** — `SelfContained=true`, bundled automatically by `dotnet publish --self-contained true`.
+2. **Windows App SDK (WinUI 3) native runtime** — `WindowsAppSDKSelfContained=true` in the csproj
+   deploys `Microsoft.WindowsAppRuntime.dll` / `.Bootstrap.dll` app-local instead of depending on
+   the machine-wide `Microsoft.WindowsAppRuntime.2` MSIX framework package. On managed/corporate
+   machines the elevated installer can register that package for the *admin* account that approved
+   UAC rather than the logged-on user, or sideloading can be blocked by policy — either way you get
+   a `XamlParseException` before the first window shows. The installer *also* runs
+   `WindowsAppRuntimeInstall-x64.exe --quiet --force` as a belt-and-suspenders fallback, but the
+   self-contained deploy is what actually fixes it on locked-down machines.
+3. **VC++ Redistributable (native DLLs)** — WinUI 3's native components, and `whisper.dll` /
+   `ggml-whisper.dll` (whisper.net's native inference engine), are compiled against the MSVC
+   runtime and do **not** bundle it themselves. The `CopyVCRuntime` MSBuild target in
+   `OnAirNative.csproj` copies these app-local after every build/publish:
+   `vcruntime140.dll`, `vcruntime140_1.dll`, `msvcp140.dll`, `msvcp140_1.dll`, `msvcp140_2.dll`,
+   `msvcp140_atomic_wait.dll`, `msvcp140_codecvt_ids.dll`, `concrt140.dll`, `vcomp140.dll`.
+   - The `msvcp140_*`/`concrt140` satellite DLLs don't show up in any static import table (verified
+     with `pefile`) — `msvcp140.dll` loads them via `LoadLibrary` on demand for specific STL features
+     (threads, atomics, codecvt), so they're bundled defensively per Microsoft's own redistribution
+     guidance.
+   - `vcomp140.dll` (OpenMP) **is** a confirmed static import of `ggml-whisper.dll` — without it,
+     Whisper transcription fails to initialise on a machine without the VC++ Redistributable already
+     installed. It ships in a separate redist subfolder (`Microsoft.VC143.OpenMP`, not
+     `Microsoft.VC143.CRT`), which is why it's easy to miss if you only copy the CRT folder.
+   - Source: `$(VCToolsRedistDir)` when a full VS install is present, else the running machine's own
+     `System32` copy — so **build on a machine that has the VC++ Redistributable installed**
+     (a bare .NET SDK/Windows SDK Build Tools install may be missing some of these files, which
+     would silently under-bundle them for everyone who installs the app).
+
+If you ever suspect a new missing native dependency, don't guess — scan the publish output's import
+tables (`pip install pefile`, then walk every `.dll`/`.exe` under the publish folder collecting
+`IMAGE_DIRECTORY_ENTRY_IMPORT` DLL names) and diff against what's actually bundled.
+
+---
+
 ## Config location
 
 `%LocalAppData%\onAIr Native\config.json`
 
 Notable values:
 - `voiceRmsThreshold`: 5.0 (lowered from 15 — easier to trigger voice scroll)
-- `overlayProtected`: true (hidden from screen capture)
+- `overlayProtected`: true by default (hidden from screen capture); toggle at runtime via the
+  Controller footer's `📽/🙈 Overlay: visible/hidden in share` button
 - `controllerProtected`: false
 - `audioRecordingSource`: `microphone` | `system` | `both`
 
