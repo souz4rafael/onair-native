@@ -6,12 +6,15 @@ namespace OnAirNative.ViewModels;
 
 public partial class AboutTabViewModel : ObservableObject
 {
-    public string AppName    => "onAIr";
-    public string Version    => "1.1.0";
-    public string Authors    => "Rafael Souza (Microsoft) · GitHub Copilot (Claude Sonnet 4.6)";
-    public string SourceUrl  => "https://github.com/souz4rafael/onair-native";
+    public string AppName      => "onAIr";
+    public string Version      => "1.2.0";
+    public string AuthorName   => "Rafael Souza (Microsoft)";
+    public string AuthorCredit => "GitHub Copilot (Claude Sonnet 4.6)";
+    public string Authors      => $"{AuthorName} · {AuthorCredit}";
+    public string LinkedInUrl  => "https://www.linkedin.com/in/souzarafael";
+    public string SourceUrl    => "https://github.com/souz4rafael/onair-native";
     public string Description =>
-        "Transparent always-on-top teleprompter Box for Windows.\n" +
+        "Transparent always-on-top TP for Windows.\n" +
         "Uses WinUI 3, whisper.net, and NAudio for native performance.";
 
     private readonly UpdateService _updateService;

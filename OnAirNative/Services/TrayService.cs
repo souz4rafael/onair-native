@@ -181,8 +181,8 @@ public sealed class TrayService : IDisposable
     {
         var menu = NativeMethods.CreatePopupMenu();
 
-        NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_SHOW_OVERLAY, "📦  Open Box");
-        NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_HIDE_OVERLAY, "🙈  Hide Box");
+        NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_SHOW_OVERLAY, "📦  Open TP");
+        NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_HIDE_OVERLAY, "🙈  Hide TP");
         NativeMethods.AppendMenu(menu, NativeMethods.MF_SEPARATOR, MENU_SEPARATOR, null);
         NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_LOAD_SCRIPT,  "📄  Load script (.txt)…");
         NativeMethods.AppendMenu(menu, NativeMethods.MF_STRING, MENU_CONTROLLER,   "🎛  Show Controller");

@@ -1,0 +1,356 @@
+using System.Net;
+using System.Net.WebSockets;
+using System.Text;
+using System.Text.Json;
+using Microsoft.UI.Dispatching;
+
+namespace OnAirNative.Services;
+
+/// <summary>Snapshot of remotely-interesting app state, pushed to connected Stream Deck plugin
+/// clients for button/dial visual feedback (Layer 2). Property names are serialized as-is
+/// (camelCase via <see cref="RemoteControlService"/>'s JsonSerializerOptions) — the Stream Deck
+/// plugin's TypeScript side has a matching interface, keep both in sync when adding fields.</summary>
+public sealed class RemoteState
+{
+    public bool   TpOpen                  { get; set; }
+    public bool   TpLocked                { get; set; }
+    public bool   TpHiddenInShare         { get; set; }
+    public bool   ControllerHiddenInShare { get; set; }
+    public bool   Recording               { get; set; }
+    public string ChatProvider            { get; set; } = "";
+    public bool   WhisperLocalLoaded      { get; set; }
+    public string WhisperModelStatus      { get; set; } = "";
+    public double Opacity                 { get; set; }
+    public int    FontSize                { get; set; }
+    public int    ScrollSpeed             { get; set; }
+    public int    VoiceScrollSpeed        { get; set; }
+    public int    ScrollStep              { get; set; }
+    public double VoiceThreshold          { get; set; }
+    /// <summary>"Manual" | "Auto" | "Voice" — mirrors <c>OverlayViewModel.ScrollMode</c>'s enum
+    /// name exactly (see <see cref="OnAirNative.ViewModels.ScrollMode"/>).</summary>
+    public string ScrollMode              { get; set; } = "";
+    public string FontFamily              { get; set; } = "";
+    /// <summary>Display filename of the currently loaded script (e.g. "demo.txt"), or the
+    /// placeholder text when nothing is loaded — mirrors <c>ScrollTabViewModel.LoadedFileName</c>.</summary>
+    public string LoadedScriptName        { get; set; } = "";
+}
+
+/// <summary>
+/// Localhost-only WebSocket server that lets the onAIr Stream Deck plugin (and, since v1.2.0,
+/// the onAIr MCP server) remote-control this app: fire the same <see cref="HotkeyAction"/>s as
+/// the global hotkeys, push a <see cref="RemoteState"/> snapshot for button/dial visual
+/// feedback, and — for MCP — apply absolute setter values and load scripts by path.
+///
+/// Security model: binds to 127.0.0.1 only (see <see cref="Port"/>) — no other machine on the
+/// network can ever reach it. Trusts anything running as the current Windows user on this
+/// machine, the same trust boundary as the global hotkeys themselves (any process can already
+/// call RegisterHotKey or simulate input). No pairing token — deliberately kept simple for v1.
+///
+/// Protocol (newline-delimited JSON per WebSocket text frame):
+///   plugin/MCP → onAIr: {"op":"command","action":"ToggleOverlayVisibility"}
+///                       {"op":"adjust","action":"IncreaseOpacity"}   (adjust and command are
+///                                                                     handled identically — both
+///                                                                     just parse into a HotkeyAction
+///                                                                     and call ExecuteAction)
+///                       {"op":"getState"}
+///                       {"op":"set","id":"<optional>","field":"FontSize","value":24}
+///                       {"op":"loadScript","id":"<optional>","path":"C:\\scripts\\demo.txt"}
+///                       {"op":"getScriptText","id":"<optional>"}
+///                       {"op":"listFonts","id":"<optional>"}
+///   onAIr → plugin/MCP: {"op":"state","data":{ ...RemoteState fields... }}   (broadcast to all)
+///                       {"op":"result","id":"<echoed>","success":true|false,"error":"...","data":...}
+///                                                       (reply to exactly the requesting client,
+///                                                        only for set/loadScript/getScriptText/
+///                                                        listFonts — command/adjust/getState stay
+///                                                        fire-and-forget, relying on the state
+///                                                        broadcast instead, unchanged for the
+///                                                        existing Stream Deck plugin)
+/// </summary>
+public sealed class RemoteControlService : IDisposable
+{
+    /// <summary>Fixed default port in the private/dynamic range. No UI to reconfigure it yet —
+    /// if it ever conflicts with something else on a user's machine, change this constant.</summary>
+    public const int Port = 47823;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
+    private readonly Action<HotkeyAction> _executeAction;
+    private readonly Func<RemoteState> _getState;
+    private readonly Func<string, JsonElement, (bool Success, string? Error)> _setField;
+    private readonly Func<string, Task<(bool Success, string? Error)>> _loadScript;
+    private readonly Func<string> _getScriptText;
+    private readonly Func<List<string>> _listFonts;
+    private readonly DispatcherQueue _uiQueue;
+    private readonly HttpListener _listener = new();
+    private readonly List<WebSocket> _clients = [];
+    private readonly object _clientsLock = new();
+    private readonly DispatcherQueueTimer _refreshTimer;
+    private CancellationTokenSource? _cts;
+    private bool _disposed;
+
+    public RemoteControlService(
+        Action<HotkeyAction> executeAction,
+        Func<RemoteState> getState,
+        DispatcherQueue uiQueue,
+        Func<string, JsonElement, (bool Success, string? Error)> setField,
+        Func<string, Task<(bool Success, string? Error)>> loadScript,
+        Func<string> getScriptText,
+        Func<List<string>> listFonts)
+    {
+        _executeAction = executeAction;
+        _getState      = getState;
+        _setField      = setField;
+        _loadScript    = loadScript;
+        _getScriptText = getScriptText;
+        _listFonts     = listFonts;
+        _uiQueue       = uiQueue;
+        _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
+
+        // Safety-net periodic broadcast — catches state changes made purely via mouse click in
+        // the Controller UI (many toggles live in XAML code-behind, not a ViewModel, so there's
+        // no single PropertyChanged source to hook for all of them). This runs on top of the
+        // immediate push that already follows every ExecuteAction call (see
+        // NotifyStateMayHaveChanged), so in practice it's a rarely-needed fallback — 2s is
+        // frequent enough for Stream Deck tile feedback without being wasteful.
+        _refreshTimer = _uiQueue.CreateTimer();
+        _refreshTimer.Interval = TimeSpan.FromSeconds(2);
+        _refreshTimer.Tick += (_, _) => BroadcastCurrentState();
+    }
+
+    public void Start()
+    {
+        _cts = new CancellationTokenSource();
+        _listener.Start();
+        _refreshTimer.Start();
+        _ = AcceptLoopAsync(_cts.Token);
+    }
+
+    /// <summary>Call after any <see cref="HotkeyAction"/> executes so connected clients see the
+    /// result immediately instead of waiting for the next timer tick. Must be called on the UI
+    /// thread — true for every current caller (HotkeyService's dispatch and this class's own
+    /// incoming-command handler both already marshal onto <see cref="_uiQueue"/> first).</summary>
+    public void NotifyStateMayHaveChanged() => BroadcastCurrentState();
+
+    private void BroadcastCurrentState()
+    {
+        List<WebSocket> targets;
+        lock (_clientsLock)
+        {
+            if (_clients.Count == 0) return;
+            targets = [.. _clients];
+        }
+
+        var state = _getState(); // safe: caller is always on the UI thread (see doc comments above)
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { op = "state", data = state }, JsonOptions));
+        _ = SendToAllAsync(targets, bytes);
+    }
+
+    private static async Task SendToAllAsync(List<WebSocket> targets, byte[] bytes)
+    {
+        foreach (var socket in targets)
+        {
+            if (socket.State != WebSocketState.Open) continue;
+            try { await socket.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None); }
+            catch { /* client gone — its own receive loop will notice and prune it */ }
+        }
+    }
+
+    private async Task AcceptLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            HttpListenerContext ctx;
+            try { ctx = await _listener.GetContextAsync().WaitAsync(ct); }
+            catch (OperationCanceledException) { return; }
+            catch (ObjectDisposedException) { return; }
+            catch (HttpListenerException) { return; }
+
+            if (!ctx.Request.IsWebSocketRequest)
+            {
+                ctx.Response.StatusCode = 400;
+                ctx.Response.Close();
+                continue;
+            }
+            _ = HandleClientAsync(ctx, ct);
+        }
+    }
+
+    private async Task HandleClientAsync(HttpListenerContext ctx, CancellationToken ct)
+    {
+        WebSocket socket;
+        try
+        {
+            var wsCtx = await ctx.AcceptWebSocketAsync(subProtocol: null);
+            socket = wsCtx.WebSocket;
+        }
+        catch { return; }
+
+        lock (_clientsLock) _clients.Add(socket);
+        try
+        {
+            await SendStateToNewClientAsync(socket, ct);
+
+            var buffer = new byte[4096];
+            while (socket.State == WebSocketState.Open && !ct.IsCancellationRequested)
+            {
+                using var ms = new MemoryStream();
+                WebSocketReceiveResult result;
+                do
+                {
+                    result = await socket.ReceiveAsync(buffer, ct);
+                    if (result.MessageType == WebSocketMessageType.Close) return;
+                    ms.Write(buffer, 0, result.Count);
+                } while (!result.EndOfMessage);
+
+                HandleIncomingMessage(socket, Encoding.UTF8.GetString(ms.ToArray()));
+            }
+        }
+        catch { /* client disconnected or errored — fall through to cleanup */ }
+        finally
+        {
+            lock (_clientsLock) _clients.Remove(socket);
+            try { socket.Dispose(); } catch { }
+        }
+    }
+
+    private void HandleIncomingMessage(WebSocket socket, string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("op", out var opEl)) return;
+            var op = opEl.GetString();
+            string? id = root.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+
+            if (op == "getState")
+            {
+                BroadcastCurrentStateFromBackgroundThread();
+                return;
+            }
+
+            if ((op == "command" || op == "adjust") &&
+                root.TryGetProperty("action", out var actionEl) &&
+                actionEl.GetString() is string actionName &&
+                Enum.TryParse<HotkeyAction>(actionName, out var action))
+            {
+                // ExecuteAction touches ViewModels/XAML elements — must run on the UI thread.
+                _uiQueue.TryEnqueue(() => _executeAction(action));
+                return;
+            }
+
+            // The four request/response ops below all touch ViewModels/XAML elements, so — like
+            // ExecuteAction above — the actual work must run on the UI thread. Unlike
+            // command/adjust/getState (fire-and-forget, relying on the state broadcast), each of
+            // these replies directly to the REQUESTING socket with a correlated "result" message,
+            // since an MCP tool call needs to know synchronously whether it succeeded.
+            if (op == "set" &&
+                root.TryGetProperty("field", out var fieldEl) &&
+                fieldEl.GetString() is string field &&
+                root.TryGetProperty("value", out var valueEl))
+            {
+                var valueClone = valueEl.Clone(); // JsonElement ties to `doc`, which is disposed at method exit
+                _uiQueue.TryEnqueue(() =>
+                {
+                    var (success, error) = _setField(field, valueClone);
+                    _ = SendResultAsync(socket, id, success, error);
+                });
+                return;
+            }
+
+            if (op == "loadScript" &&
+                root.TryGetProperty("path", out var pathEl) &&
+                pathEl.GetString() is string path)
+            {
+                _uiQueue.TryEnqueue(() => _ = HandleLoadScriptAsync(socket, id, path));
+                return;
+            }
+
+            if (op == "getScriptText")
+            {
+                _uiQueue.TryEnqueue(() =>
+                {
+                    var text = _getScriptText();
+                    _ = SendResultAsync(socket, id, true, null, text);
+                });
+                return;
+            }
+
+            if (op == "listFonts")
+            {
+                _uiQueue.TryEnqueue(() =>
+                {
+                    var fonts = _listFonts();
+                    _ = SendResultAsync(socket, id, true, null, fonts);
+                });
+                return;
+            }
+        }
+        catch { /* malformed message from the plugin — ignore, keep the connection alive */ }
+    }
+
+    /// <summary>loadScript is the one op that's genuinely async (file I/O) — awaited here, still
+    /// on the UI thread's continuation, before sending the correlated result back.</summary>
+    private async Task HandleLoadScriptAsync(WebSocket socket, string? id, string path)
+    {
+        var (success, error) = await _loadScript(path);
+        await SendResultAsync(socket, id, success, error);
+    }
+
+    /// <summary>Sends a correlated result back to exactly the requesting client — never
+    /// broadcast to all clients, unlike state pushes.</summary>
+    private static async Task SendResultAsync(WebSocket socket, string? id, bool success, string? error, object? data = null)
+    {
+        if (socket.State != WebSocketState.Open) return;
+        var payload = new Dictionary<string, object?> { ["op"] = "result", ["id"] = id, ["success"] = success };
+        if (error is not null) payload["error"] = error;
+        if (data is not null) payload["data"] = data;
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload, JsonOptions));
+        try { await socket.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None); }
+        catch { /* client gone — its own receive loop will notice and prune it */ }
+    }
+
+    /// <summary>getState requests arrive on this client's background receive-loop thread, so
+    /// (unlike NotifyStateMayHaveChanged) this one does need to hop onto the UI thread itself.</summary>
+    private void BroadcastCurrentStateFromBackgroundThread() =>
+        _uiQueue.TryEnqueue(BroadcastCurrentState);
+
+    /// <summary>Sends the current state to exactly one newly-connected client. Called from the
+    /// accept loop's background thread, so — unlike <see cref="NotifyStateMayHaveChanged"/> —
+    /// this hops onto the UI thread itself to read state safely.</summary>
+    private async Task SendStateToNewClientAsync(WebSocket socket, CancellationToken ct)
+    {
+        var tcs = new TaskCompletionSource<RemoteState>();
+        _uiQueue.TryEnqueue(() => tcs.TrySetResult(_getState()));
+        RemoteState state;
+        try { state = await tcs.Task; }
+        catch { return; }
+
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { op = "state", data = state }, JsonOptions));
+        try { await socket.SendAsync(bytes, WebSocketMessageType.Text, true, ct); }
+        catch { /* client already gone */ }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        _refreshTimer.Stop();
+        _cts?.Cancel();
+        try { _listener.Stop(); _listener.Close(); } catch { }
+
+        lock (_clientsLock)
+        {
+            foreach (var socket in _clients)
+            {
+                try { socket.Dispose(); } catch { }
+            }
+            _clients.Clear();
+        }
+        _cts?.Dispose();
+    }
+}

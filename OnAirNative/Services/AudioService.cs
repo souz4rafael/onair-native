@@ -59,6 +59,13 @@ public sealed class AudioService : IDisposable
     private WaveFileWriter? _writer;
     private bool          _recording;
 
+    // Guards _writer/_buffer: written from the NAudio callback thread (mic-only path)
+    // or the mixer pump thread (StartMixedRecording), and now also read concurrently
+    // by PeekRecordedAudio (called from a UI-thread timer for the live preview feature)
+    // without stopping the recording. MemoryStream itself is not safe for concurrent
+    // read+write, so every touch of _writer/_buffer takes this lock.
+    private readonly object _bufferLock = new();
+
     private CancellationTokenSource? _mixPumpCts;
     private Task?                    _mixPumpTask;
 
@@ -86,8 +93,8 @@ public sealed class AudioService : IDisposable
 
         _capture.DataAvailable += (_, e) =>
         {
-            if (_writer is not null && e.BytesRecorded > 0)
-                _writer.Write(e.Buffer, 0, e.BytesRecorded);
+            if (e.BytesRecorded == 0) return;
+            lock (_bufferLock) { _writer?.Write(e.Buffer, 0, e.BytesRecorded); }
         };
 
         _capture.RecordingStopped += (_, _) => { /* handled in StopRecordingAsync */ };
@@ -199,7 +206,7 @@ public sealed class AudioService : IDisposable
                     int read = pcm.Read(chunk, 0, want);
                     if (read <= 0) break;
 
-                    _writer?.Write(chunk, 0, read);
+                    lock (_bufferLock) { _writer?.Write(chunk, 0, read); }
                     written += read;
                 }
 
@@ -234,11 +241,52 @@ public sealed class AudioService : IDisposable
             try { if (_mixPumpTask is not null) await _mixPumpTask; } catch { /* pump is best-effort */ }
         }
 
-        _writer?.Flush();
-        var data = _buffer?.ToArray() ?? [];
+        byte[] data;
+        lock (_bufferLock)
+        {
+            _writer?.Flush();
+            data = _buffer?.ToArray() ?? [];
+        }
 
         CleanupCapture();
         return data;
+    }
+
+    /// <summary>
+    /// Returns a snapshot of everything captured so far, as a standalone valid WAV byte
+    /// array — without stopping the recording. Used for the live transcript preview (Q&amp;A
+    /// recording + local Whisper only; see <see cref="WhisperService.IsLocalModelLoaded"/>).
+    /// Returns an empty array if not currently recording or if nothing has been captured yet.
+    ///
+    /// Deliberately NOT windowed to a trailing slice: an earlier version trimmed this to the
+    /// last few seconds to keep re-transcription cheap on long recordings, but re-transcribing
+    /// a disjoint slice from scratch every tick made the live preview jump between unrelated
+    /// fragments and erase whatever was shown a moment before, instead of reading like a
+    /// transcript that grows as you talk. Re-transcribing the whole buffer each tick is
+    /// simpler and matches that expectation, and stays fast enough for the short Q&amp;A
+    /// questions this feature targets — each tick does get slower as the recording runs
+    /// longer, which would matter for long recordings on a slow model, but not here.
+    /// </summary>
+    public byte[] PeekRecordedAudio()
+    {
+        if (!_recording) return [];
+
+        try
+        {
+            lock (_bufferLock)
+            {
+                // _recording can flip false and StopRecordingAsync can dispose _writer/_buffer
+                // concurrently between the check above and here — guard against the resulting
+                // ObjectDisposedException instead of letting it escape as an unhandled exception
+                // on the caller's (UI thread, async void) timer tick.
+                _writer?.Flush();
+                return _buffer?.ToArray() ?? [];
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            return [];
+        }
     }
 
     private void CleanupCapture()

@@ -21,6 +21,17 @@ public enum HotkeyAction
     DecreaseScrollSpeed,
     IncreaseFontSize,
     DecreaseFontSize,
+    IncreaseVoiceScrollSpeed,
+    DecreaseVoiceScrollSpeed,
+    IncreaseScrollStep,
+    DecreaseScrollStep,
+    IncreaseVoiceThreshold,
+    DecreaseVoiceThreshold,
+    /// <summary>No physical hotkey registered for this one — only reachable via the WHISPER
+    /// MODEL card's "🔄 Recheck" button or the Stream Deck plugin's AI Status tile press
+    /// (through <see cref="RemoteControlService"/>). Included in this enum anyway since it's
+    /// the shared command vocabulary for both physical hotkeys and remote control.</summary>
+    RecheckWhisperModel,
 }
 
 /// <summary>
@@ -44,6 +55,19 @@ public enum HotkeyAction
 ///   Ctrl+Alt+,     → DecreaseScrollSpeed (Auto-scroll speed)
 ///   Ctrl+Alt+=     → IncreaseFontSize
 ///   Ctrl+Alt+-     → DecreaseFontSize
+///   Ctrl+Alt+Up    → IncreaseVoiceScrollSpeed
+///   Ctrl+Alt+Down  → DecreaseVoiceScrollSpeed
+///   Ctrl+Alt+Right → IncreaseScrollStep (Manual mode)
+///   Ctrl+Alt+Left  → DecreaseScrollStep (Manual mode)
+///   Ctrl+Alt+'     → IncreaseVoiceThreshold (Voice scroll sensitivity)
+///   Ctrl+Alt+;     → DecreaseVoiceThreshold (Voice scroll sensitivity)
+///
+/// Note: Ctrl+Alt+Arrow is, on some machines, also bound by legacy Intel/NVIDIA graphics
+/// driver control panels to rotate the display. If that binding claims the combo first,
+/// RegisterHotKey here simply fails (harmlessly — the return value is ignored, nothing
+/// throws) so onAIr's arrow hotkeys would silently not fire rather than fight over it;
+/// hasn't been observed in testing, but worth knowing if a user reports Ctrl+Alt+Up/Down/Left/Right
+/// doing nothing.
 /// </summary>
 public sealed class HotkeyService : IDisposable
 {
@@ -65,6 +89,12 @@ public sealed class HotkeyService : IDisposable
     private const int ID_SCROLL_SPEED_DOWN               = 13;
     private const int ID_FONT_SIZE_UP                    = 14;
     private const int ID_FONT_SIZE_DOWN                  = 15;
+    private const int ID_VOICE_SPEED_UP                  = 16;
+    private const int ID_VOICE_SPEED_DOWN                = 17;
+    private const int ID_SCROLL_STEP_UP                  = 18;
+    private const int ID_SCROLL_STEP_DOWN                = 19;
+    private const int ID_VOICE_THRESHOLD_UP              = 20;
+    private const int ID_VOICE_THRESHOLD_DOWN            = 21;
 
     private readonly DispatcherQueue _uiQueue;
     private Thread?  _thread;
@@ -131,6 +161,12 @@ public sealed class HotkeyService : IDisposable
             Register(ID_SCROLL_SPEED_DOWN,            NativeMethods.VK_OEM_COMMA);
             Register(ID_FONT_SIZE_UP,                 NativeMethods.VK_OEM_PLUS);
             Register(ID_FONT_SIZE_DOWN,               NativeMethods.VK_OEM_MINUS);
+            Register(ID_VOICE_SPEED_UP,               NativeMethods.VK_UP);
+            Register(ID_VOICE_SPEED_DOWN,             NativeMethods.VK_DOWN);
+            Register(ID_SCROLL_STEP_UP,               NativeMethods.VK_RIGHT);
+            Register(ID_SCROLL_STEP_DOWN,             NativeMethods.VK_LEFT);
+            Register(ID_VOICE_THRESHOLD_UP,           NativeMethods.VK_OEM_7);
+            Register(ID_VOICE_THRESHOLD_DOWN,         NativeMethods.VK_OEM_1);
 
             // Pump messages until WM_QUIT
             while (NativeMethods.GetMessage(out var msg, IntPtr.Zero, 0, 0))
@@ -142,7 +178,7 @@ public sealed class HotkeyService : IDisposable
         finally
         {
             // Cleanup hotkeys and window
-            for (int id = ID_SCROLL_UP; id <= ID_FONT_SIZE_DOWN; id++)
+            for (int id = ID_SCROLL_UP; id <= ID_VOICE_THRESHOLD_DOWN; id++)
                 NativeMethods.UnregisterHotKey(_hwnd, id);
 
             if (_hwnd != IntPtr.Zero) NativeMethods.DestroyWindow(_hwnd);
@@ -177,6 +213,12 @@ public sealed class HotkeyService : IDisposable
                     ID_SCROLL_SPEED_DOWN                  => HotkeyAction.DecreaseScrollSpeed,
                     ID_FONT_SIZE_UP                       => HotkeyAction.IncreaseFontSize,
                     ID_FONT_SIZE_DOWN                     => HotkeyAction.DecreaseFontSize,
+                    ID_VOICE_SPEED_UP                     => HotkeyAction.IncreaseVoiceScrollSpeed,
+                    ID_VOICE_SPEED_DOWN                   => HotkeyAction.DecreaseVoiceScrollSpeed,
+                    ID_SCROLL_STEP_UP                     => HotkeyAction.IncreaseScrollStep,
+                    ID_SCROLL_STEP_DOWN                   => HotkeyAction.DecreaseScrollStep,
+                    ID_VOICE_THRESHOLD_UP                 => HotkeyAction.IncreaseVoiceThreshold,
+                    ID_VOICE_THRESHOLD_DOWN               => HotkeyAction.DecreaseVoiceThreshold,
                     _                                     => null,
                 };
                 if (action.HasValue)

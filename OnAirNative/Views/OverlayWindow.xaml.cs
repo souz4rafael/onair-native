@@ -40,6 +40,10 @@ public sealed partial class OverlayWindow : Window
                     QaStatusText.Text       = ViewModel.QaStatus;
                     QaStatusText.Visibility = string.IsNullOrEmpty(ViewModel.QaStatus) ? Visibility.Collapsed : Visibility.Visible;
                     break;
+                case nameof(OverlayViewModel.LivePreviewText):
+                    LivePreviewTextBlock.Text       = string.IsNullOrEmpty(ViewModel.LivePreviewText) ? "" : $"Live preview: {ViewModel.LivePreviewText}";
+                    LivePreviewTextBlock.Visibility = string.IsNullOrEmpty(ViewModel.LivePreviewText) ? Visibility.Collapsed : Visibility.Visible;
+                    break;
                 case nameof(OverlayViewModel.QaQuestion):
                     QaQuestionText.Text       = ViewModel.QaQuestion;
                     QaQuestionText.Visibility = string.IsNullOrEmpty(ViewModel.QaQuestion) ? Visibility.Collapsed : Visibility.Visible;
@@ -61,6 +65,9 @@ public sealed partial class OverlayWindow : Window
                 case nameof(OverlayViewModel.FontSize):
                     ScriptTextBlock.FontSize = ViewModel.FontSize;
                     break;
+                case nameof(OverlayViewModel.FontFamily):
+                    ScriptTextBlock.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(ViewModel.FontFamily);
+                    break;
                 case nameof(OverlayViewModel.IsVoiceActive):
                     if (ViewModel.ScrollMode == ViewModels.ScrollMode.Voice)
                     {
@@ -80,8 +87,10 @@ public sealed partial class OverlayWindow : Window
         };
 
         // Seed initial text/appearance (persisted config values, may differ from XAML defaults)
-        ScriptTextBlock.Text     = ViewModel.ScriptText;
-        ScriptTextBlock.FontSize = ViewModel.FontSize;
+        ScriptTextBlock.Text       = ViewModel.ScriptText;
+        ScriptTextBlock.FontSize   = ViewModel.FontSize;
+        ScriptTextBlock.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(ViewModel.FontFamily);
+        ScriptTextBlock.Foreground = ParseHexColor(ViewModel.FontColor); // wasn't seeded before either — same gap, fixed while touching this block
 
         Activated += OnFirstActivated;
     }

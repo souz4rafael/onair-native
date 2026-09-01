@@ -15,6 +15,19 @@
                        FontSize="18"
                        FontWeight="SemiBold"/>
 
+            <!-- Test connection — independent of which provider is selected for chat/
+                 transcription in the Q&A tab; always tests THIS dialog's own provider. -->
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button x:Name="TestConnectionButton"
+                        Content="Test connection"
+                        Click="TestConnectionButton_Click"/>
+                <TextBlock x:Name="TestStatusText"
+                           VerticalAlignment="Center"
+                           FontSize="13"
+                           Foreground="#4A90D9"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
             <!-- ─── Azure fields ──────────────────────────────────────── -->
             <StackPanel x:Name="AzureFields" Spacing="8">
                 <TextBlock Text="Endpoint URL" Style="{ThemeResource CaptionTextBlockStyle}"/>

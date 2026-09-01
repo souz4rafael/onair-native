@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:OnAirNative.Views"
     xmlns:vm="using:OnAirNative.ViewModels"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
@@ -27,6 +28,111 @@
                 <Setter Property="CharacterSpacing" Value="40"/>
                 <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
             </Style>
+            <!-- Subtle drop shadow on every Button/ToggleButton for a slight 3D "lifted" look.
+                 Translation's Z component is what ThemeShadow actually casts from — without it
+                 the shadow is registered but renders at zero depth (invisible). Applies via
+                 implicit (keyless) styles, so it's automatic for any Button/ToggleButton that
+                 doesn't set its own explicit Style (e.g. AccentButtonStyle) — those few opt out
+                 unless the same two setters are added to them directly. -->
+            <Style TargetType="Button">
+                <Setter Property="Shadow">
+                    <Setter.Value>
+                        <ThemeShadow/>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style TargetType="ToggleButton">
+                <Setter Property="Shadow">
+                    <Setter.Value>
+                        <ThemeShadow/>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <!-- Segmented "pill" tab selector style, replacing NavigationView's top pane. Fully
+                 replaces the RadioButton template (no radio dot — a pill segment instead), so it
+                 has to re-declare its own CommonStates (hover/press/disabled — otherwise those are
+                 silently lost) alongside CheckStates (selected look). ContentPresenter.Foreground
+                 is set per-state and relies on Foreground *inheriting* down into whatever content
+                 is supplied per instance (an icon + text StackPanel) — the template can't reach
+                 into that instance content directly, only the shared ContentPresenter/Border. -->
+            <Style x:Key="PillSegment" TargetType="RadioButton">
+                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                <Setter Property="Padding" Value="10,6"/>
+                <!-- Control's own base Style would default MinWidth to 120 (the standard Fluent
+                     touch-target minimum) — fine for a normal button, but defeats the whole
+                     "icon-only pills stay small" effect here, so it's zeroed out explicitly. -->
+                <Setter Property="MinWidth" Value="0"/>
+                <Setter Property="MinHeight" Value="0"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="RadioButton">
+                            <Border x:Name="Border"
+                                    CornerRadius="6"
+                                    Background="Transparent"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="1"
+                                    Padding="{TemplateBinding Padding}">
+                                <!-- VisualStateManager.VisualStateGroups MUST be nested inside the
+                                     template's root element (Border), not a sibling after it — a sibling
+                                     placement silently fails to wire up the states (Checked/PointerOver/
+                                     etc. never actually apply), which is exactly what caused the
+                                     selected-tab accent background to never show. Matches how every
+                                     real WinUI default control template (Button, ToggleButton, ...)
+                                     structures this: VSG as a property-element child of the root,
+                                     ContentPresenter as the root's actual Child content.
+
+                                     IMPORTANT: CommonStates and CheckStates must never target the
+                                     SAME property. VisualStateGroups are independent — when one group
+                                     exits a state whose Setters touched a property, it reverts that
+                                     property to its base XAML value, with NO awareness of what another
+                                     group's Setter currently wants there. Confirmed by testing: with
+                                     both groups targeting Border.Background, mouse-leave (CommonStates
+                                     → "Normal") wiped out CheckStates' "Checked" accent color, even
+                                     though the tab was still logically selected — exactly the bug
+                                     reported ("selected tab loses its highlight once the mouse leaves").
+                                     Fix: Background is CheckStates-only (selection fill); hover/press
+                                     feedback uses BorderBrush/BorderThickness instead (CommonStates-only)
+                                     — disjoint properties, so the two groups can never stomp on
+                                     each other regardless of transition order. -->
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal"/>
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="Border.BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="Border.BorderBrush" Value="{ThemeResource ControlStrokeColorSecondaryBrush}"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled">
+                                            <VisualState.Setters>
+                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                    <VisualStateGroup x:Name="CheckStates">
+                                        <VisualState x:Name="Checked">
+                                            <VisualState.Setters>
+                                                <Setter Target="Border.Background" Value="{ThemeResource AccentFillColorDefaultBrush}"/>
+                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Unchecked"/>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <ContentPresenter x:Name="ContentPresenter"
+                                                  HorizontalAlignment="Center"
+                                                  Content="{TemplateBinding Content}"
+                                                  Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>   <!-- Tab bar -->
@@ -34,48 +140,81 @@
             <RowDefinition Height="Auto"/>   <!-- Footer -->
         </Grid.RowDefinitions>
 
-        <!-- ═══ Tab selector ═══════════════════════════════════════════════ -->
-        <NavigationView
-            x:Name="NavView"
-            Grid.Row="0" Grid.RowSpan="2"
-            PaneDisplayMode="Top"
-            IsBackButtonVisible="Collapsed"
-            IsPaneToggleButtonVisible="False"
-            IsSettingsVisible="False"
-            SelectionChanged="NavView_SelectionChanged">
+        <!-- ═══ Tab selector — segmented pill control ═════════════════════════
+             Selected segment shows icon+text; the other 4 collapse to icon-only. All 5
+             columns are Auto (see below) so each pill's width simply tracks its own
+             content — no manual column-width bookkeeping needed in code-behind. -->
+        <Border Grid.Row="0"
+                HorizontalAlignment="Center"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                CornerRadius="8"
+                Margin="12,10,12,6"
+                Padding="3">
+            <!-- All columns Auto — WinUI re-measures Auto columns automatically whenever a
+                 child's content changes (e.g. the label TextBlock toggling Visible/Collapsed),
+                 so the selected pill naturally grows to fit icon+text and the rest shrink to
+                 icon-only with zero manual column-width bookkeeping needed. Centered so the
+                 cluster doesn't stretch to fill the card when Auto columns leave space unused. -->
+            <Grid x:Name="TabPillGrid" HorizontalAlignment="Center" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto">
+                <Grid.ChildrenTransitions>
+                    <TransitionCollection>
+                        <RepositionThemeTransition/>
+                    </TransitionCollection>
+                </Grid.ChildrenTransitions>
 
-            <NavigationView.MenuItems>
-                <NavigationViewItem Content="Script" Tag="script">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE8A4;"/>
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Q&amp;A" Tag="qa">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE720;"/>
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="App Stealth" Tag="stealth">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE9E9;"/>
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="Settings" Tag="settings">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE713;"/>
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="About" Tag="about">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE946;"/>
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-            </NavigationView.MenuItems>
+                <RadioButton x:Name="TabScript" Grid.Column="0" Tag="script"
+                             GroupName="MainTabs" Style="{StaticResource PillSegment}"
+                             AutomationProperties.Name="Script tab"
+                             Checked="MainTab_Checked">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE8A4;" FontSize="16"/>
+                        <TextBlock x:Name="TabScriptText" Text="Script"/>
+                    </StackPanel>
+                </RadioButton>
+                <RadioButton x:Name="TabQa" Grid.Column="1" Tag="qa"
+                             GroupName="MainTabs" Style="{StaticResource PillSegment}"
+                             AutomationProperties.Name="Q&amp;A tab"
+                             Checked="MainTab_Checked">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE720;" FontSize="16"/>
+                        <TextBlock x:Name="TabQaText" Text="Q&amp;A"/>
+                    </StackPanel>
+                </RadioButton>
+                <RadioButton x:Name="TabStealth" Grid.Column="2" Tag="stealth"
+                             GroupName="MainTabs" Style="{StaticResource PillSegment}"
+                             AutomationProperties.Name="App Stealth tab"
+                             Checked="MainTab_Checked">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE9E9;" FontSize="16"/>
+                        <TextBlock x:Name="TabStealthText" Text="App Stealth"/>
+                    </StackPanel>
+                </RadioButton>
+                <RadioButton x:Name="TabSettings" Grid.Column="3" Tag="settings"
+                             GroupName="MainTabs" Style="{StaticResource PillSegment}"
+                             AutomationProperties.Name="Settings tab"
+                             Checked="MainTab_Checked">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE713;" FontSize="16"/>
+                        <TextBlock x:Name="TabSettingsText" Text="Settings"/>
+                    </StackPanel>
+                </RadioButton>
+                <RadioButton x:Name="TabAbout" Grid.Column="4" Tag="about"
+                             GroupName="MainTabs" Style="{StaticResource PillSegment}"
+                             AutomationProperties.Name="About tab"
+                             Checked="MainTab_Checked">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE946;" FontSize="16"/>
+                        <TextBlock x:Name="TabAboutText" Text="About"/>
+                    </StackPanel>
+                </RadioButton>
+            </Grid>
+        </Border>
 
-            <!-- ── Tab content panels (swap on selection) ─────────────── -->
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled"
-                          Margin="0,0,0,48">
+        <!-- ── Tab content panels (swap on selection) ─────────────── -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Margin="0,0,0,48">
               <Grid>
 
                 <!-- ── Scroll Tab ─────────────────────────────────────── -->
@@ -97,7 +236,7 @@
                                            FontSize="13"
                                            Text="No file loaded"
                                            TextTrimming="CharacterEllipsis"/>
-                                <Button Grid.Column="1"
+                                <Button Translation="0,0,20" Grid.Column="1"
                                         Content="Load .txt…"
                                         Click="LoadFile_Click"
                                         Margin="8,0,0,0"/>
@@ -158,7 +297,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Card: Font size / Box opacity / Font color -->
+                    <!-- Card: Font size / TP opacity / Font color -->
                     <Border Style="{StaticResource CardBorderStyle}">
                         <StackPanel Spacing="10">
                             <TextBlock Text="APPEARANCE" Style="{StaticResource CardTitleStyle}"/>
@@ -166,32 +305,67 @@
                             <TextBlock Text="Font size" Style="{ThemeResource CaptionTextBlockStyle}"/>
                             <Slider x:Name="FontSizeSlider" ValueChanged="FontSizeSlider_ValueChanged"/>
 
-                            <TextBlock Text="Box opacity" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBlock Text="TP opacity" Style="{ThemeResource CaptionTextBlockStyle}"/>
                             <Slider x:Name="OpacitySlider" ValueChanged="OpacitySlider_ValueChanged"/>
 
-                            <!-- Font color presets -->
-                            <TextBlock Text="Font color" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button x:Name="ColorWhite"    Width="32" Height="32" CornerRadius="16" Background="#F0F0F0" Tag="#F0F0F0"   Click="FontColor_Click" ToolTipService.ToolTip="White"/>
-                                <Button x:Name="ColorYellow"   Width="32" Height="32" CornerRadius="16" Background="#FFE066" Tag="#FFE066"   Click="FontColor_Click" ToolTipService.ToolTip="Yellow"/>
-                                <Button x:Name="ColorGreen"    Width="32" Height="32" CornerRadius="16" Background="#90EE90" Tag="#90EE90"   Click="FontColor_Click" ToolTipService.ToolTip="Green"/>
-                                <Button x:Name="ColorCyan"     Width="32" Height="32" CornerRadius="16" Background="#7FFFD4" Tag="#7FFFD4"   Click="FontColor_Click" ToolTipService.ToolTip="Aqua"/>
-                                <Button x:Name="ColorOrange"   Width="32" Height="32" CornerRadius="16" Background="#FFA07A" Tag="#FFA07A"   Click="FontColor_Click" ToolTipService.ToolTip="Orange"/>
-                                <Button x:Name="ColorPink"     Width="32" Height="32" CornerRadius="16" Background="#FFB6C1" Tag="#FFB6C1"   Click="FontColor_Click" ToolTipService.ToolTip="Pink"/>
-                                <TextBlock x:Name="FontColorIndicator" VerticalAlignment="Center"
-                                           FontSize="12"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           Text=""/>
+                            <!-- Font color presets + custom hex, alongside Font family — grouped
+                                 as two side-by-side columns since both are "how the text looks"
+                                 settings, rather than stacked as separate full-width rows. -->
+                            <StackPanel Orientation="Horizontal" Spacing="24">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Font color" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button Translation="0,0,20" x:Name="ColorWhite"    Width="32" Height="32" CornerRadius="16" Background="#F0F0F0" Tag="#F0F0F0"   Click="FontColor_Click" ToolTipService.ToolTip="White"/>
+                                        <Button Translation="0,0,20" x:Name="ColorYellow"   Width="32" Height="32" CornerRadius="16" Background="#FFE066" Tag="#FFE066"   Click="FontColor_Click" ToolTipService.ToolTip="Yellow"/>
+                                        <Button Translation="0,0,20" x:Name="ColorGreen"    Width="32" Height="32" CornerRadius="16" Background="#90EE90" Tag="#90EE90"   Click="FontColor_Click" ToolTipService.ToolTip="Green"/>
+                                        <Button Translation="0,0,20" x:Name="ColorCyan"     Width="32" Height="32" CornerRadius="16" Background="#7FFFD4" Tag="#7FFFD4"   Click="FontColor_Click" ToolTipService.ToolTip="Aqua"/>
+                                        <Button Translation="0,0,20" x:Name="ColorOrange"   Width="32" Height="32" CornerRadius="16" Background="#FFA07A" Tag="#FFA07A"   Click="FontColor_Click" ToolTipService.ToolTip="Orange"/>
+                                        <Button Translation="0,0,20" x:Name="ColorPink"     Width="32" Height="32" CornerRadius="16" Background="#FFB6C1" Tag="#FFB6C1"   Click="FontColor_Click" ToolTipService.ToolTip="Pink"/>
+                                        <TextBox x:Name="CustomColorBox"
+                                                 Width="72" Height="32"
+                                                 FontSize="12"
+                                                 PlaceholderText="#RRGGBB"
+                                                 MaxLength="7"
+                                                 VerticalAlignment="Center"
+                                                 KeyDown="CustomColorBox_KeyDown"
+                                                 ToolTipService.ToolTip="Custom color (hex)"/>
+                                        <Button Translation="0,0,20"
+                                                Content="Apply"
+                                                Height="32"
+                                                Padding="8,0"
+                                                FontSize="12"
+                                                VerticalAlignment="Center"
+                                                Click="ApplyCustomColor_Click"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="CustomColorErrorText"
+                                               FontSize="11"
+                                               Foreground="#FF6B6B"
+                                               Text=""
+                                               Visibility="Collapsed"/>
+                                </StackPanel>
+
+                                <StackPanel Spacing="8" Width="220">
+                                    <TextBlock Text="Font family" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                                    <ComboBox x:Name="FontFamilyCombo"
+                                              HorizontalAlignment="Stretch"
+                                              SelectionChanged="FontFamilyCombo_SelectionChanged"/>
+                                </StackPanel>
                             </StackPanel>
                         </StackPanel>
                     </Border>
+
 
                     <!-- Save / Reset settings (plain row, not a card — an action bar, not a settings group) -->
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Content="💾 Save settings"
                                 Style="{ThemeResource AccentButtonStyle}"
-                                Click="SaveSettings_Click"/>
-                        <Button Content="↺ Reset defaults"
+                                Translation="0,0,20"
+                                Click="SaveSettings_Click">
+                            <Button.Shadow>
+                                <ThemeShadow/>
+                            </Button.Shadow>
+                        </Button>
+                        <Button Translation="0,0,20" Content="↺ Reset defaults"
                                 Click="ResetSettings_Click"/>
                         <TextBlock x:Name="SaveStatusText"
                                    VerticalAlignment="Center"
@@ -203,16 +377,16 @@
                     <Border Style="{StaticResource CardBorderStyle}">
                         <StackPanel Spacing="10">
                             <TextBlock Text="VIRTUAL SCROLL BUTTONS" Style="{StaticResource CardTitleStyle}"/>
-                            <Grid>
+                            <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0" Content="▲" FontSize="28"
-                                        HorizontalAlignment="Stretch" Height="64"
+                                <Button Translation="0,0,20" Grid.Column="0" Content="▲" FontSize="24"
+                                        HorizontalAlignment="Stretch" Height="52"
                                         Click="ScrollUp_Click"/>
-                                <Button Grid.Column="1" Content="▼" FontSize="28"
-                                        HorizontalAlignment="Stretch" Height="64"
+                                <Button Translation="0,0,20" Grid.Column="1" Content="▼" FontSize="24"
+                                        HorizontalAlignment="Stretch" Height="52"
                                         Click="ScrollDown_Click"/>
                             </Grid>
                         </StackPanel>
@@ -228,7 +402,7 @@
                         <StackPanel Spacing="10">
                             <TextBlock Text="RECORDING" Style="{StaticResource CardTitleStyle}"/>
                             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                <Button x:Name="ControllerRecordBtn"
+                                <Button Translation="0,0,20" x:Name="ControllerRecordBtn"
                                         Content="● Record"
                                         Background="#4A90D9"
                                         Foreground="White"
@@ -259,20 +433,14 @@
                                       HorizontalAlignment="Stretch"
                                       SelectionChanged="TranscriptionCombo_SelectionChanged"/>
 
-                            <Grid Margin="0,4,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0"
-                                        Content="⚙ Configure provider…"
-                                        Click="ConfigureProvider_Click"
-                                        HorizontalAlignment="Stretch"/>
-                                <Button Grid.Column="1"
-                                        Content="Test"
-                                        Margin="8,0,0,0"
-                                        Click="TestConnection_Click"/>
-                            </Grid>
+                            <!-- Provider credentials/models are configured from Settings → AI
+                                 PROVIDERS (one card per provider, independent of which one is
+                                 selected here for chat/transcription) — this just tests
+                                 whichever chat provider is currently selected above. -->
+                            <Button Translation="0,0,20"
+                                    Content="Test connection"
+                                    HorizontalAlignment="Stretch"
+                                    Click="TestConnection_Click"/>
 
                             <TextBlock x:Name="ConnectionStatusText"
                                        Foreground="#4A90D9"
@@ -321,11 +489,26 @@
                                          Grid.Column="0"
                                          PlaceholderText="C:\models\ggml-base.en.bin"
                                          TextChanged="WhisperModelBox_TextChanged"/>
-                                <Button Grid.Column="1"
+                                <Button Translation="0,0,20" Grid.Column="1"
                                         Content="Browse"
                                         Margin="8,0,0,0"
                                         Click="BrowseWhisperModel_Click"/>
                             </Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock x:Name="WhisperModelStatusText"
+                                           FontSize="12"
+                                           VerticalAlignment="Center"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Text=""/>
+                                <Button Translation="0,0,20" Content="🔄 Load / Unload"
+                                        FontSize="12"
+                                        Padding="8,4"
+                                        Click="RecheckWhisperModel_Click"
+                                        ToolTipService.ToolTip="Loads the model at the path above, or unloads back to the cloud API if the path is blank"/>
+                            </StackPanel>
+                            <HyperlinkButton Content="Download local models (ggml .bin) from huggingface.co"
+                                             NavigateUri="https://huggingface.co/ggerganov/whisper.cpp"
+                                             Padding="0"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -333,7 +516,8 @@
                 <!-- ── Settings Tab ────────────────────────────────────── -->
                 <StackPanel x:Name="SettingsPanel" Spacing="14" Padding="16" Visibility="Collapsed">
 
-                    <!-- Card: Audio source -->
+                    <!-- Card: Audio source (also hosts the Voice scroll sensitivity slider —
+                         merged in v1.2.0, both are audio-input-related settings) -->
                     <Border Style="{StaticResource CardBorderStyle}">
                         <StackPanel Spacing="10">
                             <TextBlock Text="AUDIO SOURCE" Style="{StaticResource CardTitleStyle}"/>
@@ -359,15 +543,38 @@
                                       SelectionChanged="OutputDeviceCombo_SelectionChanged"
                                       PlaceholderText="Default system output"/>
 
-                            <Button Content="↺ Refresh device list"
-                                    Click="RefreshDevices_Click"/>
-                        </StackPanel>
-                    </Border>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Translation="0,0,20" Content="↺ Refresh device list"
+                                        Click="RefreshDevices_Click"/>
+                                <!-- Live mic level meter — same RMS plumbing as the Script tab's
+                                     Voice scroll mode indicator, so you can confirm the selected
+                                     input device is actually picking up sound before going live. -->
+                                <ToggleButton x:Name="MicTestToggle"
+                                              Content="🎙 Test audio source"
+                                              Click="MicTestToggle_Click"/>
+                            </StackPanel>
+                            <Border x:Name="MicTestPanel" Visibility="Collapsed"
+                                    Background="#1A1A2E" CornerRadius="6" Padding="10,6">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <TextBlock Text="🎙" FontSize="14" VerticalAlignment="Center"/>
+                                    <ProgressBar x:Name="MicTestLevelBar"
+                                                 Minimum="0" Maximum="30"
+                                                 Width="120" Height="8"
+                                                 VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="MicTestLevelText"
+                                               FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center"
+                                               Text="0.0"/>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock x:Name="MicTestStatusText"
+                                       FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       Text=""/>
 
-                    <!-- Card: Voice scroll sensitivity -->
-                    <Border Style="{StaticResource CardBorderStyle}">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="VOICE SCROLL SENSITIVITY" Style="{StaticResource CardTitleStyle}"/>
+                            <TextBlock Text="Voice scroll sensitivity" Style="{ThemeResource CaptionTextBlockStyle}" Margin="0,8,0,0"/>
                             <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextWrapping="Wrap">
                                 Lower = more sensitive (scrolls with quiet speech). Higher = only loud speech triggers scroll.
                             </TextBlock>
@@ -376,6 +583,76 @@
                             <TextBlock x:Name="VoiceThresholdValue"
                                        FontSize="12"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: AI providers — one compact chip per provider, sized to its own
+                         text+button content (not full window width) and wrapping onto multiple
+                         rows as the window is resized, instead of 6 separate full-width cards. -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="AI PROVIDERS" Style="{StaticResource CardTitleStyle}"/>
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextWrapping="Wrap">
+                                Configure credentials and test each provider here. The Q&amp;A tab just picks
+                                which configured provider to use for chat and transcription.
+                            </TextBlock>
+
+                            <controls:WrapPanel HorizontalSpacing="8" VerticalSpacing="8">
+                                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6" Padding="10,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Azure OpenAI" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="AzureProviderStatus" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <Button Translation="0,0,20" Content="Configure" FontSize="12" Padding="10,5" Tag="azure" Click="ConfigureProviderCard_Click"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6" Padding="10,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="OpenAI" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="OpenAiProviderStatus" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <Button Translation="0,0,20" Content="Configure" FontSize="12" Padding="10,5" Tag="openai" Click="ConfigureProviderCard_Click"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6" Padding="10,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Groq" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="GroqProviderStatus" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <Button Translation="0,0,20" Content="Configure" FontSize="12" Padding="10,5" Tag="groq" Click="ConfigureProviderCard_Click"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6" Padding="10,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Anthropic Claude" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="AnthropicProviderStatus" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <Button Translation="0,0,20" Content="Configure" FontSize="12" Padding="10,5" Tag="anthropic" Click="ConfigureProviderCard_Click"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6" Padding="10,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Google Gemini" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="GeminiProviderStatus" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <Button Translation="0,0,20" Content="Configure" FontSize="12" Padding="10,5" Tag="gemini" Click="ConfigureProviderCard_Click"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6" Padding="10,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Mistral" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="MistralProviderStatus" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <Button Translation="0,0,20" Content="Configure" FontSize="12" Padding="10,5" Tag="mistral" Click="ConfigureProviderCard_Click"/>
+                                    </StackPanel>
+                                </Border>
+                            </controls:WrapPanel>
                         </StackPanel>
                     </Border>
 
@@ -388,6 +665,41 @@
                                 <RadioButton x:Name="ThemeLightRadio"  Content="Light"  Tag="Light"  Checked="ThemeRadioChanged"/>
                                 <RadioButton x:Name="ThemeDarkRadio"   Content="Dark"   Tag="Dark"   Checked="ThemeRadioChanged"/>
                             </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Remote control server — shared by BOTH the Stream Deck plugin and
+                         the onAIr MCP server (mcp-server/), which are just two different clients
+                         of the exact same loopback WebSocket server. One toggle gates both. -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="REMOTE CONTROL" Style="{StaticResource CardTitleStyle}"/>
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextWrapping="Wrap">
+                                Lets a physical Elgato Stream Deck, or an MCP-enabled AI assistant (Claude
+                                Desktop, VS Code Copilot Chat, etc.), remote-control onAIr — toggle the TP,
+                                adjust opacity/font/scroll, load scripts, and more. Runs a small local-only
+                                server on this PC (127.0.0.1, port 47823 — never reachable from the network).
+                            </TextBlock>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock x:Name="RemoteControlStatusText"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <ToggleSwitch x:Name="RemoteControlToggle"
+                                              OnContent="On" OffContent="Off"
+                                              Toggled="RemoteControlToggle_Toggled"/>
+                            </StackPanel>
+                            <Button Content="📥 Install Stream Deck Plugin"
+                                    Click="InstallStreamDeckPlugin_Click"
+                                    ToolTipService.ToolTip="Installs the onAIr Remote plugin into Stream Deck (requires the Stream Deck app)"/>
+                            <TextBlock x:Name="InstallPluginStatusText"
+                                       FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       Text=""/>
+                            <Button Content="🔌 MCP Tools &amp; Setup…"
+                                    Click="McpToolsSetup_Click"
+                                    ToolTipService.ToolTip="Configure which MCP tools are enabled and get the config snippet for your AI client"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -417,7 +729,7 @@
                                           HorizontalAlignment="Stretch"
                                           PlaceholderText="Select a window…"
                                           SelectionChanged="WindowListCombo_SelectionChanged"/>
-                                <Button Grid.Column="1"
+                                <Button Translation="0,0,20" Grid.Column="1"
                                         Content="↺"
                                         Margin="8,0,0,0"
                                         ToolTipService.ToolTip="Refresh window list"
@@ -429,9 +741,14 @@
                                         Content="⊕ Embed in container"
                                         IsEnabled="False"
                                         Style="{ThemeResource AccentButtonStyle}"
+                                        Translation="0,0,20"
                                         Click="EmbedBtn_Click"
-                                        ToolTipService.ToolTip="Re-parent the selected window into a stealth container"/>
-                                <Button x:Name="ReleaseEmbedBtn"
+                                        ToolTipService.ToolTip="Re-parent the selected window into a stealth container">
+                                    <Button.Shadow>
+                                        <ThemeShadow/>
+                                    </Button.Shadow>
+                                </Button>
+                                <Button Translation="0,0,20" x:Name="ReleaseEmbedBtn"
                                         Content="⊖ Release"
                                         Visibility="Collapsed"
                                         Click="ReleaseEmbedBtn_Click"/>
@@ -450,20 +767,40 @@
 
                     <!-- Identity block (no card — the heading is header enough) -->
                     <StackPanel Spacing="6">
-                        <TextBlock Text="onAIr"
-                                   FontSize="24" FontWeight="Bold"/>
-                        <TextBlock x:Name="VersionText"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                        <TextBlock Text="Transparent teleprompter Box · WinUI 3 · whisper.net · NAudio"
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                            <TextBlock Text="onAIr"
+                                       FontSize="24" FontWeight="Bold"/>
+                            <TextBlock x:Name="VersionText"
+                                       FontSize="16"
+                                       VerticalAlignment="Bottom" Margin="0,0,0,3"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
+                        <TextBlock Text="Transparent always-on-top TP · WinUI 3 · whisper.net · NAudio"
                                    TextWrapping="Wrap"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                        <TextBlock x:Name="AuthorsText" TextWrapping="Wrap"/>
-                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   FontSize="12" TextWrapping="Wrap">
-                            github.com/souz4rafael/onair-native
-                        </TextBlock>
-                        <HyperlinkButton Content="View source on GitHub"
-                                         NavigateUri="https://github.com/souz4rafael/onair-native"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock x:Name="AuthorNameText" VerticalAlignment="Center"/>
+                            <HyperlinkButton x:Name="LinkedInLink"
+                                             Padding="4,0" VerticalAlignment="Center"
+                                             ToolTipService.ToolTip="LinkedIn profile"
+                                             AutomationProperties.Name="LinkedIn profile">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE77B;" FontSize="14"/>
+                                    <TextBlock Text="LinkedIn" FontSize="13"/>
+                                </StackPanel>
+                            </HyperlinkButton>
+                            <TextBlock x:Name="AuthorCreditText" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       FontSize="12" VerticalAlignment="Center">
+                                github.com/souz4rafael/onair-native
+                            </TextBlock>
+                            <HyperlinkButton Content="View source on GitHub"
+                                             NavigateUri="https://github.com/souz4rafael/onair-native"
+                                             Padding="0"/>
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- Card: Updates -->
@@ -471,7 +808,7 @@
                         <StackPanel Spacing="10">
                             <TextBlock Text="UPDATES" Style="{StaticResource CardTitleStyle}"/>
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button x:Name="CheckUpdatesBtn"
+                                <Button Translation="0,0,20" x:Name="CheckUpdatesBtn"
                                         Content="Check for Updates"
                                         Click="CheckUpdatesButton_Click"/>
                                 <TextBlock x:Name="UpdateStatusTextBlock"
@@ -481,7 +818,7 @@
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                             </StackPanel>
                             <StackPanel x:Name="UpdateDownloadPanel" Spacing="8" Visibility="Collapsed">
-                                <Button x:Name="DownloadUpdateBtn"
+                                <Button Translation="0,0,20" x:Name="DownloadUpdateBtn"
                                         Content="⬇ Download &amp; Install"
                                         Click="DownloadUpdateButton_Click"/>
                                 <ProgressBar x:Name="UpdateProgressBar"
@@ -517,6 +854,12 @@
                                     <RowDefinition/>
                                     <RowDefinition/>
                                     <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
                                 </Grid.RowDefinitions>
                                 <!-- Row 0 -->
                                 <TextBlock Grid.Row="0" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+PgUp"/>
@@ -526,7 +869,7 @@
                                 <TextBlock Grid.Row="1" Grid.Column="2" FontSize="12" Text="Scroll script down (manual mode)" TextWrapping="Wrap"/>
                                 <!-- Row 2 -->
                                 <TextBlock Grid.Row="2" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+Home"/>
-                                <TextBlock Grid.Row="2" Grid.Column="2" FontSize="12" Text="Lock / unlock Box" TextWrapping="Wrap"/>
+                                <TextBlock Grid.Row="2" Grid.Column="2" FontSize="12" Text="Lock / unlock TP" TextWrapping="Wrap"/>
                                 <!-- Row 3 -->
                                 <TextBlock Grid.Row="3" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+R"/>
                                 <TextBlock Grid.Row="3" Grid.Column="2" FontSize="12" Text="Start / stop Q&amp;A recording" TextWrapping="Wrap"/>
@@ -535,16 +878,16 @@
                                 <TextBlock Grid.Row="4" Grid.Column="2" FontSize="12" Text="Open script file picker" TextWrapping="Wrap"/>
                                 <!-- Row 5 -->
                                 <TextBlock Grid.Row="5" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+]"/>
-                                <TextBlock Grid.Row="5" Grid.Column="2" FontSize="12" Text="Increase Box opacity" TextWrapping="Wrap"/>
+                                <TextBlock Grid.Row="5" Grid.Column="2" FontSize="12" Text="Increase TP opacity" TextWrapping="Wrap"/>
                                 <!-- Row 6 -->
                                 <TextBlock Grid.Row="6" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+["/>
-                                <TextBlock Grid.Row="6" Grid.Column="2" FontSize="12" Text="Decrease Box opacity" TextWrapping="Wrap"/>
+                                <TextBlock Grid.Row="6" Grid.Column="2" FontSize="12" Text="Decrease TP opacity" TextWrapping="Wrap"/>
                                 <!-- Row 7 -->
                                 <TextBlock Grid.Row="7" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+V"/>
-                                <TextBlock Grid.Row="7" Grid.Column="2" FontSize="12" Text="Open / hide Box" TextWrapping="Wrap"/>
+                                <TextBlock Grid.Row="7" Grid.Column="2" FontSize="12" Text="Open / hide TP" TextWrapping="Wrap"/>
                                 <!-- Row 8 -->
                                 <TextBlock Grid.Row="8" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+S"/>
-                                <TextBlock Grid.Row="8" Grid.Column="2" FontSize="12" Text="Hide / show Box in share" TextWrapping="Wrap"/>
+                                <TextBlock Grid.Row="8" Grid.Column="2" FontSize="12" Text="Hide / show TP in share" TextWrapping="Wrap"/>
                                 <!-- Row 9 -->
                                 <TextBlock Grid.Row="9" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+H"/>
                                 <TextBlock Grid.Row="9" Grid.Column="2" FontSize="12" Text="Hide / show Controller in share" TextWrapping="Wrap"/>
@@ -563,13 +906,30 @@
                                 <!-- Row 14 -->
                                 <TextBlock Grid.Row="14" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+-"/>
                                 <TextBlock Grid.Row="14" Grid.Column="2" FontSize="12" Text="Decrease font size" TextWrapping="Wrap"/>
+                                <!-- Row 15 -->
+                                <TextBlock Grid.Row="15" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+Up"/>
+                                <TextBlock Grid.Row="15" Grid.Column="2" FontSize="12" Text="Increase Voice scroll speed (Voice mode)" TextWrapping="Wrap"/>
+                                <!-- Row 16 -->
+                                <TextBlock Grid.Row="16" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+Down"/>
+                                <TextBlock Grid.Row="16" Grid.Column="2" FontSize="12" Text="Decrease Voice scroll speed (Voice mode)" TextWrapping="Wrap"/>
+                                <!-- Row 17 -->
+                                <TextBlock Grid.Row="17" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+Right"/>
+                                <TextBlock Grid.Row="17" Grid.Column="2" FontSize="12" Text="Increase scroll step (Manual mode)" TextWrapping="Wrap"/>
+                                <!-- Row 18 -->
+                                <TextBlock Grid.Row="18" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+Left"/>
+                                <TextBlock Grid.Row="18" Grid.Column="2" FontSize="12" Text="Decrease scroll step (Manual mode)" TextWrapping="Wrap"/>
+                                <!-- Row 19 -->
+                                <TextBlock Grid.Row="19" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+'"/>
+                                <TextBlock Grid.Row="19" Grid.Column="2" FontSize="12" Text="Increase Voice scroll sensitivity" TextWrapping="Wrap"/>
+                                <!-- Row 20 -->
+                                <TextBlock Grid.Row="20" Grid.Column="0" FontFamily="Consolas" FontSize="12" Text="Ctrl+Alt+;"/>
+                                <TextBlock Grid.Row="20" Grid.Column="2" FontSize="12" Text="Decrease Voice scroll sensitivity" TextWrapping="Wrap"/>
                             </Grid>
                         </StackPanel>
                     </Border>
                 </StackPanel>
               </Grid>
             </ScrollViewer>
-        </NavigationView>
 
         <!-- ═══ Footer ══════════════════════════════════════════════════════ -->
         <Border Grid.Row="2"
@@ -583,32 +943,32 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Left: the 3 Box controls (this PC visibility, lock, and share visibility) -->
+                    <!-- Left: the 3 TP controls (this PC visibility, lock, and share visibility) -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">
-                        <ToggleButton x:Name="OverlayToggle"
-                                      Content="📦 Open Box"
+                        <ToggleButton Translation="0,0,20" x:Name="OverlayToggle"
+                                      Content="📦 Open TP"
                                       FontSize="12"
-                                      ToolTipService.ToolTip="Show or hide the Box on this PC"
+                                      ToolTipService.ToolTip="Show or hide the TP on this PC"
                                       Checked="OverlayToggle_Checked"
                                       Unchecked="OverlayToggle_Unchecked"/>
 
-                        <ToggleButton x:Name="LockToggle"
-                                      Content="🔒 Lock Box"
+                        <ToggleButton Translation="0,0,20" x:Name="LockToggle"
+                                      Content="🔒 Lock TP"
                                       FontSize="12"
-                                      ToolTipService.ToolTip="Lock or unlock the Box's position and size"
+                                      ToolTipService.ToolTip="Lock or unlock the TP's position and size"
                                       Checked="LockToggle_Checked"
                                       Unchecked="LockToggle_Unchecked"/>
 
-                        <ToggleButton x:Name="OverlayProtectToggle"
-                                      Content="🙈 Hide Box"
+                        <ToggleButton Translation="0,0,20" x:Name="OverlayProtectToggle"
+                                      Content="🙈 Hide TP"
                                       FontSize="12"
-                                      ToolTipService.ToolTip="Hide or show the Box while screen sharing"
+                                      ToolTipService.ToolTip="Hide or show the TP while screen sharing"
                                       Checked="OverlayProtectToggle_Checked"
                                       Unchecked="OverlayProtectToggle_Unchecked"/>
                     </StackPanel>
 
                     <!-- Right: Controller screen-share protection -->
-                    <ToggleButton x:Name="ProtectToggle"
+                    <ToggleButton Translation="0,0,20" x:Name="ProtectToggle"
                                   Grid.Column="1"
                                   Content="🙈 Hide Controller"
                                   FontSize="12"

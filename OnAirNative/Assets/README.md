@@ -12,7 +12,8 @@ Whisper.net uses `.bin` (ggml) model files. Download from:
   https://huggingface.co/ggerganov/whisper.cpp
 
 Recommended model sizes:
-- `ggml-base.en.bin`   ~142 MB — fastest, English only
+- `ggml-tiny.en.bin`   ~75 MB  — fastest, English only
+- `ggml-base.en.bin`   ~142 MB — fast, English only
 - `ggml-small.en.bin`  ~244 MB — balanced
 - `ggml-medium.bin`    ~1.5 GB — best accuracy, multilingual
 

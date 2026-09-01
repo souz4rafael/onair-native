@@ -1,24 +1,35 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using OnAirNative.Models;
 using OnAirNative.Services;
 using OnAirNative.ViewModels;
 
 namespace OnAirNative.Views.Dialogs;
 
 /// <summary>
-/// ContentDialog for editing provider-specific credentials and model names.
-/// Shows/hides field groups based on the currently selected provider.
+/// ContentDialog for editing one specific provider's credentials/models and testing its
+/// connection — independent of whichever provider is currently SELECTED for chat/transcription
+/// in the AI/Q&amp;A tab. Opened from Settings → AI PROVIDERS, one card per provider, each
+/// passing its own <paramref name="providerKey"/> explicitly.
+///
+/// Previously this dialog read/wrote <c>_config.Current.Provider</c> (the chat dropdown's
+/// selection) directly — a real bug: with e.g. Chat=Groq but Transcription=OpenAI, there was no
+/// way to ever configure OpenAI's key without first switching the chat dropdown to OpenAI (an
+/// unwanted side effect just to edit a credential). Now the provider to edit is fixed at
+/// construction time and has nothing to do with either dropdown.
 /// </summary>
 public sealed partial class ProviderConfigDialog : ContentDialog
 {
-    private readonly ConfigService  _config;
-    private readonly AiTabViewModel _vm;
+    private readonly ConfigService _config;
+    private readonly AiChatService _ai;
+    private readonly string        _providerKey;
 
-    public ProviderConfigDialog(ConfigService config, AiTabViewModel vm)
+    public ProviderConfigDialog(ConfigService config, AiChatService ai, string providerKey)
     {
         InitializeComponent();
-        _config = config;
-        _vm     = vm;
+        _config      = config;
+        _ai          = ai;
+        _providerKey = providerKey;
 
         PrimaryButtonClick += OnSave;
         LoadFields();
@@ -26,9 +37,8 @@ public sealed partial class ProviderConfigDialog : ContentDialog
 
     private void LoadFields()
     {
-        var provider = _config.Current.Provider;
         ProviderNameText.Text = AiTabViewModel.ChatProviders[
-            Array.IndexOf(AiTabViewModel.ProviderKeys, provider)];
+            Array.IndexOf(AiTabViewModel.ProviderKeys, _providerKey)];
 
         // Show only the relevant field group
         AzureFields.Visibility    = Visibility.Collapsed;
@@ -38,7 +48,7 @@ public sealed partial class ProviderConfigDialog : ContentDialog
         GeminiFields.Visibility   = Visibility.Collapsed;
         MistralFields.Visibility  = Visibility.Collapsed;
 
-        switch (provider)
+        switch (_providerKey)
         {
             case "azure":
                 AzureFields.Visibility = Visibility.Visible;
@@ -88,11 +98,57 @@ public sealed partial class ProviderConfigDialog : ContentDialog
         }
     }
 
+    /// <summary>Builds a standalone AppConfig snapshot reflecting the CURRENTLY TYPED field
+    /// values (not yet saved) for this dialog's provider only — used by the Test button so
+    /// testing reflects what's on screen right now, not stale saved credentials. Deliberately a
+    /// throwaway object, never assigned into <see cref="_config"/>, so Cancel truly discards
+    /// unsaved edits (matches the dialog's existing Save/Cancel contract).</summary>
+    private AppConfig BuildConfigFromCurrentFields()
+    {
+        var snapshot = new AppConfig();
+        switch (_providerKey)
+        {
+            case "azure":
+                snapshot.Azure = new AzureConfig
+                {
+                    Endpoint = AzureEndpoint.Text.Trim(),
+                    Key      = AzureKey.Password,
+                };
+                break;
+            case "openai":
+                snapshot.OpenAi = new OpenAiConfig { Key = OpenAiKey.Password };
+                break;
+            case "groq":
+                snapshot.Groq = new GroqConfig { Key = GroqKey.Password };
+                break;
+            case "anthropic":
+                snapshot.Anthropic = new AnthropicConfig { Key = AnthropicKey.Password };
+                break;
+            case "gemini":
+                snapshot.Gemini = new GeminiConfig { Key = GeminiKey.Password };
+                break;
+            case "mistral":
+                snapshot.Mistral = new MistralConfig { Key = MistralKey.Password };
+                break;
+        }
+        return snapshot;
+    }
+
+    private async void TestConnectionButton_Click(object sender, RoutedEventArgs e)
+    {
+        TestConnectionButton.IsEnabled = false;
+        TestStatusText.Text = "Testing…";
+        try
+        {
+            var result = await _ai.TestConnectionAsync(_providerKey, BuildConfigFromCurrentFields());
+            TestStatusText.Text = result.Success ? $"✓ {result.Text}" : $"✗ {result.Error}";
+        }
+        finally { TestConnectionButton.IsEnabled = true; }
+    }
+
     private void OnSave(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
-        var provider = _config.Current.Provider;
-
-        switch (provider)
+        switch (_providerKey)
         {
             case "azure":
                 _config.Current.Azure.Endpoint          = AzureEndpoint.Text.Trim();

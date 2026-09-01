@@ -15,6 +15,7 @@ public partial class ScrollTabViewModel : ObservableObject
     [ObservableProperty] private int    _voiceScrollSpeed;
     [ObservableProperty] private int    _selectedScrollModeIndex; // 0=Manual, 1=Auto, 2=Voice
     [ObservableProperty] private int    _fontSize;
+    [ObservableProperty] private string _fontFamily = "Segoe UI";
     [ObservableProperty] private double _opacity;
 
     public ScrollTabViewModel(ConfigService config, OverlayViewModel overlay)
@@ -27,6 +28,7 @@ public partial class ScrollTabViewModel : ObservableObject
         ScrollSpeed      = a.ScrollSpeed;
         VoiceScrollSpeed = a.VoiceScrollSpeed;
         FontSize         = a.FontSize;
+        FontFamily       = a.FontFamily;
         Opacity          = a.Opacity / 100.0;
 
         overlay.PropertyChanged += (_, e) =>
@@ -88,6 +90,13 @@ public partial class ScrollTabViewModel : ObservableObject
     {
         _config.Current.Appearance.FontSize = value;
         _overlay.FontSize = value;
+        _config.Save();
+    }
+
+    partial void OnFontFamilyChanged(string value)
+    {
+        _config.Current.Appearance.FontFamily = value;
+        _overlay.FontFamily = value;
         _config.Save();
     }
 

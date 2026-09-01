@@ -1,0 +1,27 @@
+{
+    "name": "onair-remote-streamdeck",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Stream Deck plugin remote-controlling the onAIr teleprompter.",
+    "type": "module",
+    "scripts": {
+        "build": "rollup -c",
+        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.souz4rafael.onair\""
+    },
+    "devDependencies": {
+        "@elgato/cli": "^1.9.0",
+        "@rollup/plugin-commonjs": "^28.0.1",
+        "@rollup/plugin-node-resolve": "^15.3.0",
+        "@rollup/plugin-terser": "^0.4.4",
+        "@rollup/plugin-typescript": "^12.1.1",
+        "@types/node": "^26.2.0",
+        "@types/ws": "^8.18.1",
+        "rollup": "^4.62.5",
+        "tslib": "^2.8.0",
+        "typescript": "5.9.3"
+    },
+    "dependencies": {
+        "@elgato/streamdeck": "^2.1.2",
+        "ws": "^8.21.3"
+    }
+}

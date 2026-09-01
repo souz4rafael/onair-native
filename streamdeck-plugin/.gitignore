@@ -1,0 +1,5 @@
+node_modules/
+com.souz4rafael.onair.sdPlugin/bin/
+com.souz4rafael.onair.sdPlugin/logs/
+*.streamDeckPlugin
+.DS_Store

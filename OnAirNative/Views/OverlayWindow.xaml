@@ -95,6 +95,19 @@
                                TextWrapping="Wrap"
                                Visibility="Collapsed"/>
 
+                    <!-- Live preview — rolling, still-forming transcript shown only while
+                         recording with a local Whisper model loaded (see OverlayViewModel.
+                         StartLivePreview). More muted than the final QaQuestionText below,
+                         since it can still change on the next tick. Named "...Block" to
+                         avoid reading like ViewModel.LivePreviewText in the code-behind. -->
+                    <TextBlock x:Name="LivePreviewTextBlock"
+                               Foreground="#70708A"
+                               FontSize="13"
+                               FontStyle="Italic"
+                               TextWrapping="Wrap"
+                               Text=""
+                               Visibility="Collapsed"/>
+
                     <!-- Transcribed question (italic, subtle) -->
                     <TextBlock x:Name="QaQuestionText"
                                Foreground="#9090A0"

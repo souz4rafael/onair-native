@@ -97,11 +97,11 @@ public sealed partial class ControllerWindow : Window
             // Set default scroll mode selection (IsChecked in XAML causes bug in WinUI 3 2.1.x)
             ScrollManualRadio.IsChecked = true;
 
-            // Box (overlay window) starts hidden — sync the toggle button
+            // TP (overlay window) starts hidden — sync the toggle button
             OverlayToggle.IsChecked = false;
             SyncOverlayToggle(false);
 
-            // Box starts unlocked (move mode = interactive)
+            // TP starts unlocked (move mode = interactive)
             LockToggle.IsChecked = false;
             SyncLockToggle(false);
 
@@ -109,7 +109,7 @@ public sealed partial class ControllerWindow : Window
             WindowService.SetContentProtection(_hwnd, App.Config.Current.ControllerProtected);
             ProtectToggle.IsChecked = App.Config.Current.ControllerProtected;
 
-            // Box screen-share protection state (applied by OverlayWindow itself on
+            // TP screen-share protection state (applied by OverlayWindow itself on
             // its own first-activate; here we just sync the footer toggle to match).
             OverlayProtectToggle.IsChecked = App.Config.Current.OverlayProtected;
             SyncOverlayProtectToggle(App.Config.Current.OverlayProtected);
@@ -125,7 +125,7 @@ public sealed partial class ControllerWindow : Window
     /// <summary>Called from ControllerWindow.OnFirstActivated (after _hwnd is valid).</summary>
     public void InitViewModel()
     {
-        ViewModel = new ControllerViewModel(App.Config, Overlay!.ViewModel, App.AiChat, App.Update);
+        ViewModel = new ControllerViewModel(App.Config, Overlay!.ViewModel, App.AiChat, App.Whisper, App.Update);
         ViewModel.ControllerProtectionChanged += (_, protect) =>
             WindowService.SetContentProtection(_hwnd, protect);
         ViewModel.OverlayProtectionChanged += (_, protect) =>
@@ -134,6 +134,19 @@ public sealed partial class ControllerWindow : Window
                 WindowService.SetContentProtection(WindowService.GetHwnd(Overlay), protect);
         };
         ViewModel.ThemeChanged += (_, theme) => ApplyTheme(theme);
+        ViewModel.RemoteControlEnabledChanged += (_, enabled) =>
+        {
+            if (enabled) App.Instance.StartRemoteControl();
+            else App.Instance.StopRemoteControl();
+            UpdateRemoteControlStatusText();
+        };
+
+        // Local Whisper model load status (Loading…/Model loaded/File not found/Failed) → UI
+        ViewModel.AiTab.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ViewModels.AiTabViewModel.WhisperModelStatus))
+                WhisperModelStatusText.Text = ViewModel.AiTab.WhisperModelStatus;
+        };
 
         // Update check/install status → About tab UI
         ViewModel.AboutTab.PropertyChanged += OnAboutTabPropertyChanged;
@@ -182,6 +195,7 @@ public sealed partial class ControllerWindow : Window
             SystemPromptBox.Text        = ViewModel.AiTab.SystemPrompt;
             PresentationContextBox.Text = ViewModel.AiTab.PresentationContext;
             WhisperModelBox.Text        = ViewModel.AiTab.WhisperModelPath;
+            WhisperModelStatusText.Text = ViewModel.AiTab.WhisperModelStatus;
 
             // Scroll tab — set ranges THEN values.
             // Must be inside _populatingUi guard: setting Minimum causes WinUI 3 to clamp
@@ -203,21 +217,29 @@ public sealed partial class ControllerWindow : Window
             FontSizeSlider.Value         = ViewModel.ScrollTab.FontSize;
             OpacitySlider.Value          = ViewModel.ScrollTab.Opacity * 100;
 
+            PopulateFontFamilies();
+
             FileNameText.Text = ViewModel.ScrollTab.LoadedFileName;
-            FontColorIndicator.Text = App.Config.Current.Appearance.FontColor;
+            CustomColorBox.Text = App.Config.Current.Appearance.FontColor;
 
             // About
             VersionText.Text = $"v{ViewModel.AboutTab.Version}";
-            AuthorsText.Text = ViewModel.AboutTab.Authors;
+            AuthorNameText.Text = ViewModel.AboutTab.AuthorName;
+            AuthorCreditText.Text = $"· {ViewModel.AboutTab.AuthorCredit}";
+            LinkedInLink.NavigateUri = new Uri(ViewModel.AboutTab.LinkedInUrl);
             UpdateStatusTextBlock.Text  = "";
             UpdateDownloadPanel.Visibility = Visibility.Collapsed;
             UpdateProgressBar.Visibility   = Visibility.Collapsed;
 
-            // Select first nav item
-            NavView.SelectedItem = NavView.MenuItems[0];
+            // Select first tab — TabScript starts unchecked (no IsChecked="True" in XAML
+            // anymore, deliberately) so this false→true transition reliably fires
+            // MainTab_Checked here, at a safe point where ViewModel/Overlay are ready —
+            // exactly mirroring what NavView.SelectedItem = NavView.MenuItems[0] used to do.
+            TabScript.IsChecked = true;
 
             // Settings tab — audio devices + voice threshold
             PopulateAudioDevices();
+            PopulateProviderStatuses();
             AudioSourceCombo.SelectedIndex = App.Config.Current.AudioRecordingSource switch
             {
                 "system" => 1,
@@ -233,6 +255,10 @@ public sealed partial class ControllerWindow : Window
             ThemeSystemRadio.IsChecked = App.Config.Current.Theme == "System";
             ThemeLightRadio.IsChecked  = App.Config.Current.Theme == "Light";
             ThemeDarkRadio.IsChecked   = App.Config.Current.Theme == "Dark";
+
+            // Settings tab — Stream Deck remote control
+            RemoteControlToggle.IsOn = ViewModel.RemoteControlEnabled;
+            UpdateRemoteControlStatusText();
         }
         finally
         {
@@ -315,11 +341,34 @@ public sealed partial class ControllerWindow : Window
             await ViewModel.AboutTab.DownloadAndInstallCommand.ExecuteAsync(null);
     }
 
-    // ── NavigationView tab switching ──────────────────────────────────────────
+    // ── Pill tab bar switching ────────────────────────────────────────────────
 
-    private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    /// <summary>Tag/RadioButton/label triples for the 5 main tabs — single source of truth for
+    /// <see cref="UpdateTabPillLayout"/> so adding/removing a tab only means editing this array.</summary>
+    private (string Tag, RadioButton Button, TextBlock Label)[] MainTabs => new[]
     {
-        var tag = (args.SelectedItem as NavigationViewItem)?.Tag?.ToString();
+        ("script",   TabScript,   TabScriptText),
+        ("qa",       TabQa,       TabQaText),
+        ("stealth",  TabStealth,  TabStealthText),
+        ("settings", TabSettings, TabSettingsText),
+        ("about",    TabAbout,    TabAboutText),
+    };
+
+    /// <summary>Selected segment shows icon+text; the other 4 collapse to icon-only. Columns
+    /// are all Auto in XAML (see TabPillGrid) so simply toggling the label's Visibility is
+    /// enough — WinUI re-measures Auto columns automatically on any content change, no manual
+    /// column-width bookkeeping needed. Paired with the pill Grid's
+    /// <c>RepositionThemeTransition</c> in XAML so the resulting reflow slides smoothly.</summary>
+    private void UpdateTabPillLayout(string? selectedTag)
+    {
+        foreach (var (tag, _, label) in MainTabs)
+            label.Visibility = tag == selectedTag ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void MainTab_Checked(object sender, RoutedEventArgs e)
+    {
+        var tag = (sender as RadioButton)?.Tag?.ToString();
+        UpdateTabPillLayout(tag);
 
         ScrollPanel.Visibility   = tag == "script"   ? Visibility.Visible : Visibility.Collapsed;
         AiPanel.Visibility       = tag == "qa"       ? Visibility.Visible : Visibility.Collapsed;
@@ -334,6 +383,10 @@ public sealed partial class ControllerWindow : Window
         // Auto-refresh device list when Settings tab is opened
         if (tag == "settings" && WindowListCombo.Items.Count == 0)
             PopulateAudioDevices();
+
+        // Stop the mic level test if navigating away from Settings — avoid an orphaned
+        // capture running while the user is on some other tab.
+        if (tag != "settings") StopMicTest();
 
         // Auto-check for updates the first time the About tab is opened this session
         if (tag == "about" && !_updateCheckedThisSession)
@@ -395,6 +448,63 @@ public sealed partial class ControllerWindow : Window
         if (_populatingUi) return;
         if (sender is not RadioButton rb) return;
         ViewModel.Theme = rb.Tag?.ToString() ?? "System";
+    }
+
+    // ── Settings tab — Stream Deck remote control ─────────────────────────────
+
+    private void RemoteControlToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_populatingUi) return;
+        ViewModel.RemoteControlEnabled = RemoteControlToggle.IsOn;
+    }
+
+    /// <summary>Reflects the live server status — checks App.RemoteControl directly rather than
+    /// just the config flag, since a bind failure (port already in use) means the toggle can be
+    /// "on" in config while the server itself isn't actually running. Public because LaunchCore
+    /// starts/skips the server AFTER this window's InitViewModel/PopulateStaticUi already ran
+    /// once (too early to know the real outcome) and needs to trigger a refresh afterward.</summary>
+    public void RefreshRemoteControlStatusText() => UpdateRemoteControlStatusText();
+
+    private void UpdateRemoteControlStatusText()
+    {
+        RemoteControlStatusText.Text = App.RemoteControl is not null
+            ? $"● Running on port {RemoteControlService.Port}"
+            : (ViewModel.RemoteControlEnabled ? "⚠ Enabled but not running (port busy?)" : "○ Stopped");
+    }
+
+    /// <summary>Installs the bundled onAIr Remote Stream Deck plugin by launching the packaged
+    /// .streamDeckPlugin file — identical to a user double-clicking it in Explorer, which hands
+    /// off to the Stream Deck app's own install flow (registered as that file extension's
+    /// handler). Requires the Stream Deck app to be installed.</summary>
+    private void InstallStreamDeckPlugin_Click(object sender, RoutedEventArgs e)
+    {
+        var pluginPath = Path.Combine(AppContext.BaseDirectory, "Assets", "onair-remote.streamDeckPlugin");
+        if (!File.Exists(pluginPath))
+        {
+            InstallPluginStatusText.Text = "⚠ Plugin file not found in this install.";
+            return;
+        }
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(pluginPath) { UseShellExecute = true });
+            InstallPluginStatusText.Text = "Handed off to Stream Deck — follow its install prompt.";
+        }
+        catch (Exception ex)
+        {
+            InstallPluginStatusText.Text = $"⚠ Couldn't launch installer: {ex.Message} (is Stream Deck installed?)";
+        }
+    }
+
+    /// <summary>Opens the MCP Tools &amp; Setup dialog — usage instructions, a ready-to-copy
+    /// client config snippet, and a per-tool enable/disable checklist.</summary>
+    private async void McpToolsSetup_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new McpToolsDialog(App.Config)
+        {
+            XamlRoot = Content.XamlRoot,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            dialog.SaveToolsState();
     }
 
     private void ScrollStepSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -490,6 +600,214 @@ public sealed partial class ControllerWindow : Window
 
     private const double OpacityStepPercent = 5;
 
+    /// <summary>
+    /// Nudges Voice mode's scroll speed by <see cref="VoiceScrollSpeedStep"/> points, called
+    /// from the Ctrl+Alt+Up/Down global hotkeys. <paramref name="direction"/> is +1 to increase, -1 to decrease.
+    /// </summary>
+    public void AdjustVoiceScrollSpeed(int direction)
+    {
+        var newSpeed = (int)Math.Clamp(
+            ViewModel.ScrollTab.VoiceScrollSpeed + direction * VoiceScrollSpeedStep,
+            VoiceScrollSpeedSlider.Minimum, VoiceScrollSpeedSlider.Maximum);
+
+        _populatingUi = true;
+        try
+        {
+            ViewModel.ScrollTab.VoiceScrollSpeed = newSpeed;
+            VoiceScrollSpeedSlider.Value = newSpeed;
+        }
+        finally { _populatingUi = false; }
+    }
+
+    private const int VoiceScrollSpeedStep = 5;
+
+    /// <summary>
+    /// Nudges Manual mode's scroll step (px) by <see cref="ScrollStepStep"/>, called from the
+    /// Ctrl+Alt+Right/Left global hotkeys. <paramref name="direction"/> is +1 to increase, -1 to decrease.
+    /// </summary>
+    public void AdjustScrollStep(int direction)
+    {
+        var newStep = (int)Math.Clamp(
+            ViewModel.ScrollTab.ScrollStep + direction * ScrollStepStep,
+            ScrollStepSlider.Minimum, ScrollStepSlider.Maximum);
+
+        _populatingUi = true;
+        try
+        {
+            ViewModel.ScrollTab.ScrollStep = newStep;
+            ScrollStepSlider.Value = newStep;
+        }
+        finally { _populatingUi = false; }
+    }
+
+    private const int ScrollStepStep = 20;
+
+    /// <summary>
+    /// Nudges Voice mode's scroll sensitivity threshold by <see cref="VoiceThresholdStep"/>, called
+    /// from the Ctrl+Alt+'/; global hotkeys. <paramref name="direction"/> is +1 to increase, -1 to decrease.
+    /// Writes straight to config (mirrors <see cref="VoiceThresholdSlider_ValueChanged"/>) since this
+    /// setting isn't backed by a ViewModel property.
+    /// </summary>
+    public void AdjustVoiceThreshold(int direction)
+    {
+        var newThreshold = Math.Clamp(
+            App.Config.Current.Appearance.VoiceRmsThreshold + direction * VoiceThresholdStep,
+            VoiceThresholdSlider.Minimum, VoiceThresholdSlider.Maximum);
+
+        _populatingUi = true;
+        try
+        {
+            App.Config.Current.Appearance.VoiceRmsThreshold = newThreshold;
+            VoiceThresholdValue.Text = $"Current: {newThreshold:F1}";
+            VoiceThresholdSlider.Value = newThreshold;
+            App.Config.Save();
+        }
+        finally { _populatingUi = false; }
+    }
+
+    private const double VoiceThresholdStep = 2.0;
+
+    /// <summary>
+    /// Builds a snapshot of remotely-interesting state — consumed by <see cref="RemoteControlService"/>
+    /// to push to the Stream Deck plugin (button state feedback + dial value displays).
+    /// </summary>
+    public RemoteState GetRemoteState() => new()
+    {
+        TpOpen                  = OverlayToggle?.IsChecked ?? false,
+        TpLocked                = LockToggle?.IsChecked ?? false,
+        TpHiddenInShare         = OverlayProtectToggle?.IsChecked ?? false,
+        ControllerHiddenInShare = ProtectToggle?.IsChecked ?? false,
+        Recording               = Overlay?.ViewModel.IsRecording ?? false,
+        ChatProvider            = AiTabViewModel.ChatProviders.ElementAtOrDefault(ViewModel.AiTab.SelectedChatProviderIndex) ?? "",
+        WhisperLocalLoaded      = App.Whisper.IsLocalModelLoaded,
+        WhisperModelStatus      = ViewModel.AiTab.WhisperModelStatus,
+        Opacity                 = ViewModel.ScrollTab.Opacity * 100.0,
+        FontSize                = ViewModel.ScrollTab.FontSize,
+        ScrollSpeed             = ViewModel.ScrollTab.ScrollSpeed,
+        VoiceScrollSpeed        = ViewModel.ScrollTab.VoiceScrollSpeed,
+        ScrollStep              = ViewModel.ScrollTab.ScrollStep,
+        VoiceThreshold          = App.Config.Current.Appearance.VoiceRmsThreshold,
+        ScrollMode              = (Overlay?.ViewModel.ScrollMode ?? ViewModels.ScrollMode.Manual).ToString(),
+        FontFamily              = ViewModel.ScrollTab.FontFamily,
+        LoadedScriptName        = ViewModel.ScrollTab.LoadedFileName,
+    };
+
+    /// <summary>Applies an absolute setter value by field name — the MCP server's write path.
+    /// Each case mirrors the SAME validation/clamp the corresponding UI control already applies
+    /// (reads the live slider Minimum/Maximum, the same hex regex, the same installed-fonts
+    /// check) so a value accepted here is guaranteed consistent with what the Appearance/
+    /// Settings UI would have allowed. Returns (false, reason) instead of throwing so
+    /// <see cref="RemoteControlService"/> can report a clear error back to the MCP caller.</summary>
+    public (bool Success, string? Error) SetRemoteField(string field, System.Text.Json.JsonElement value)
+    {
+        try
+        {
+            switch (field)
+            {
+                case "FontSize":
+                {
+                    var v = (int)Math.Clamp(value.GetInt32(), (int)FontSizeSlider.Minimum, (int)FontSizeSlider.Maximum);
+                    _populatingUi = true;
+                    try { ViewModel.ScrollTab.FontSize = v; FontSizeSlider.Value = v; }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
+                case "Opacity":
+                {
+                    var pct = Math.Clamp(value.GetDouble(), OpacitySlider.Minimum, OpacitySlider.Maximum);
+                    _populatingUi = true;
+                    try { ViewModel.ScrollTab.Opacity = pct / 100.0; OpacitySlider.Value = pct; }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
+                case "ScrollSpeed":
+                {
+                    var v = (int)Math.Clamp(value.GetInt32(), (int)ScrollSpeedSlider.Minimum, (int)ScrollSpeedSlider.Maximum);
+                    _populatingUi = true;
+                    try { ViewModel.ScrollTab.ScrollSpeed = v; ScrollSpeedSlider.Value = v; }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
+                case "VoiceScrollSpeed":
+                {
+                    var v = (int)Math.Clamp(value.GetInt32(), (int)VoiceScrollSpeedSlider.Minimum, (int)VoiceScrollSpeedSlider.Maximum);
+                    _populatingUi = true;
+                    try { ViewModel.ScrollTab.VoiceScrollSpeed = v; VoiceScrollSpeedSlider.Value = v; }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
+                case "ScrollStep":
+                {
+                    var v = (int)Math.Clamp(value.GetInt32(), (int)ScrollStepSlider.Minimum, (int)ScrollStepSlider.Maximum);
+                    _populatingUi = true;
+                    try { ViewModel.ScrollTab.ScrollStep = v; ScrollStepSlider.Value = v; }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
+                case "VoiceThreshold":
+                {
+                    var v = Math.Clamp(value.GetDouble(), VoiceThresholdSlider.Minimum, VoiceThresholdSlider.Maximum);
+                    _populatingUi = true;
+                    try
+                    {
+                        App.Config.Current.Appearance.VoiceRmsThreshold = v;
+                        VoiceThresholdValue.Text = $"Current: {v:F1}";
+                        VoiceThresholdSlider.Value = v;
+                        App.Config.Save();
+                    }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
+                case "FontColor":
+                {
+                    var hex = value.GetString() ?? "";
+                    if (!hex.StartsWith('#')) hex = "#" + hex;
+                    if (!HexColorPattern.IsMatch(hex))
+                        return (false, "Enter a valid hex color, e.g. #FF8800");
+                    ViewModel.ScrollTab.SetFontColor(hex);
+                    CustomColorBox.Text = hex;
+                    return (true, null);
+                }
+                case "FontFamily":
+                {
+                    var family = value.GetString() ?? "";
+                    var installed = GetInstalledFontFamilies();
+                    if (!installed.Contains(family))
+                        return (false, $"Font family not installed: {family}");
+                    _populatingUi = true;
+                    try
+                    {
+                        ViewModel.ScrollTab.FontFamily = family;
+                        FontFamilyCombo.SelectedItem = family;
+                    }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
+                case "ScrollMode":
+                {
+                    var mode = value.GetString() ?? "";
+                    // Flip the physical RadioButton (like a real click) so the mode-specific
+                    // control visibility (ScrollModeChanged) and SelectedScrollModeIndex stay
+                    // in sync too — not just the underlying OverlayViewModel.ScrollMode.
+                    switch (mode)
+                    {
+                        case "Manual": ScrollManualRadio.IsChecked = true; break;
+                        case "Auto":   ScrollAutoRadio.IsChecked   = true; break;
+                        case "Voice":  ScrollVoiceRadio.IsChecked  = true; break;
+                        default: return (false, "ScrollMode must be Manual, Auto, or Voice");
+                    }
+                    return (true, null);
+                }
+                default:
+                    return (false, $"Unknown field: {field}");
+            }
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
     // ── AI tab handlers ───────────────────────────────────────────────────────
 
     private void ChatProviderCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -502,15 +820,6 @@ public sealed partial class ControllerWindow : Window
     {
         if (_populatingUi) return;
         ViewModel.AiTab.SelectedTranscriptionProviderIndex = TranscriptionCombo.SelectedIndex;
-    }
-
-    private async void ConfigureProvider_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new ProviderConfigDialog(App.Config, ViewModel.AiTab)
-        {
-            XamlRoot = Content.XamlRoot,
-        };
-        await dialog.ShowAsync();
     }
 
     private async void TestConnection_Click(object sender, RoutedEventArgs e)
@@ -542,12 +851,20 @@ public sealed partial class ControllerWindow : Window
         }
     }
 
+    private void RecheckWhisperModel_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.AiTab.RecheckWhisperModelCommand.Execute(null);
+
+    /// <summary>Forces a Whisper local/cloud recheck — used by the Stream Deck plugin's
+    /// AI Status tile press (via the RecheckWhisperModel remote action).</summary>
+    public void RecheckWhisperModel() =>
+        ViewModel.AiTab.RecheckWhisperModelCommand.Execute(null);
+
     // ── About tab ─────────────────────────────────────────────────────────────
 
     private void GitHubLink_Click(object sender, RoutedEventArgs e) =>
         ViewModel.AboutTab.OpenSourceRepoCommand.Execute(null);
 
-    // ── Box visibility (Open Box) ─────────────────────────────────────────────
+    // ── TP visibility (Open TP) ─────────────────────────────────────────────
 
     private void OverlayToggle_Checked(object sender, RoutedEventArgs e)
     {
@@ -561,9 +878,9 @@ public sealed partial class ControllerWindow : Window
         if (Overlay is not null) WindowService.HideWindow(Overlay);
     }
 
-    /// <summary>Syncs the "Open Box" toggle's checked state. The label itself is static
-    /// ("📦 Open Box") — only the pressed/checked visual reflects whether the Box is
-    /// currently open. Public because the tray menu shows/hides the Box directly via
+    /// <summary>Syncs the "Open TP" toggle's checked state. The label itself is static
+    /// ("📦 Open TP") — only the pressed/checked visual reflects whether the TP is
+    /// currently open. Public because the tray menu shows/hides the TP directly via
     /// WindowService without going through this button's click.</summary>
     public void SyncOverlayToggle(bool visible)
     {
@@ -571,11 +888,11 @@ public sealed partial class ControllerWindow : Window
         OverlayToggle.IsChecked = visible;
     }
 
-    /// <summary>Toggles the Box open/hidden — used by the Ctrl+Alt+V global hotkey.</summary>
+    /// <summary>Toggles the TP open/hidden — used by the Ctrl+Alt+V global hotkey.</summary>
     public void ToggleOverlayVisibility() =>
         OverlayToggle.IsChecked = !(OverlayToggle.IsChecked ?? false);
 
-    // ── Lock / Unlock Box ──────────────────────────────────────────────────────
+    // ── Lock / Unlock TP ──────────────────────────────────────────────────────
 
     private void LockToggle_Checked(object sender, RoutedEventArgs e)
     {
@@ -589,7 +906,7 @@ public sealed partial class ControllerWindow : Window
         Overlay?.ViewModel.SetMoveMode(true);  // unlocked = interactive
     }
 
-    /// <summary>Syncs the "Lock Box" toggle's checked state (static label; only the
+    /// <summary>Syncs the "Lock TP" toggle's checked state (static label; only the
     /// pressed/checked visual reflects the current lock state).</summary>
     public void SyncLockToggle(bool locked)
     {
@@ -608,11 +925,50 @@ public sealed partial class ControllerWindow : Window
         t.Start();
     }
 
+    /// <summary>Applies a preset swatch's color immediately (same as before) and also mirrors
+    /// its hex value into the editable CustomColorBox, so the user can nudge it further from
+    /// there instead of only seeing a static readout.</summary>
     private void FontColor_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as Button)?.Tag is not string hex) return;
         ViewModel.ScrollTab.SetFontColor(hex);
-        FontColorIndicator.Text = hex;
+        CustomColorBox.Text = hex;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex HexColorPattern =
+        new(@"^#[0-9A-Fa-f]{6}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private void ApplyCustomColor_Click(object sender, RoutedEventArgs e) => ApplyCustomColor();
+
+    private void CustomColorBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Enter) ApplyCustomColor();
+    }
+
+    /// <summary>Validates and applies the user-typed hex color, via the same SetFontColor path
+    /// used by the preset swatches. Accepts "#RRGGBB" (with or without the leading '#').</summary>
+    private void ApplyCustomColor()
+    {
+        var text = CustomColorBox.Text.Trim();
+        if (!text.StartsWith('#')) text = "#" + text;
+
+        if (!HexColorPattern.IsMatch(text))
+        {
+            CustomColorErrorText.Text       = "Enter a valid hex color, e.g. #FF8800";
+            CustomColorErrorText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        CustomColorErrorText.Visibility = Visibility.Collapsed;
+        ViewModel.ScrollTab.SetFontColor(text);
+        CustomColorBox.Text = text; // normalizes a leading '#' the user may have omitted
+    }
+
+    private void FontFamilyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_populatingUi) return;
+        if (FontFamilyCombo.SelectedItem is string family)
+            ViewModel.ScrollTab.FontFamily = family;
     }
 
     private void ResetSettings_Click(object sender, RoutedEventArgs e)
@@ -646,8 +1002,8 @@ public sealed partial class ControllerWindow : Window
     public void ToggleControllerCaptureProtection() =>
         ProtectToggle.IsChecked = !(ProtectToggle.IsChecked ?? false);
 
-    // ── Footer: Hide Box (screen-share protection) ─────────────────────────────
-    // Lets the presenter reveal the Box to viewers of a shared screen/recording
+    // ── Footer: Hide TP (screen-share protection) ─────────────────────────────
+    // Lets the presenter reveal the TP to viewers of a shared screen/recording
     // (default is hidden, same as before this toggle existed).
 
     private void OverlayProtectToggle_Checked(object sender, RoutedEventArgs e)
@@ -662,15 +1018,15 @@ public sealed partial class ControllerWindow : Window
         SyncOverlayProtectToggle(false);
     }
 
-    /// <summary>Syncs the "Hide Box" toggle's checked state (static label; only the
-    /// pressed/checked visual reflects whether the Box is currently hidden from capture).</summary>
+    /// <summary>Syncs the "Hide TP" toggle's checked state (static label; only the
+    /// pressed/checked visual reflects whether the TP is currently hidden from capture).</summary>
     private void SyncOverlayProtectToggle(bool protect)
     {
         if (OverlayProtectToggle is null) return;
         OverlayProtectToggle.IsChecked = protect;
     }
 
-    /// <summary>Toggles "Hide Box" (visible/hidden in share) — used by the Ctrl+Alt+S global hotkey.</summary>
+    /// <summary>Toggles "Hide TP" (visible/hidden in share) — used by the Ctrl+Alt+S global hotkey.</summary>
     public void ToggleOverlayCaptureProtection() =>
         OverlayProtectToggle.IsChecked = !(OverlayProtectToggle.IsChecked ?? false);
 
@@ -678,6 +1034,31 @@ public sealed partial class ControllerWindow : Window
 
     private void ControllerRecordBtn_Click(object sender, RoutedEventArgs e) =>
         _ = Overlay?.ViewModel.ToggleRecordingAsync();
+
+    // ── Appearance tab — font family ───────────────────────────────────────────
+
+    /// <summary>Enumerates every font family actually installed on this PC (not a fixed
+    /// hardcoded list) via System.Drawing.Text.InstalledFontCollection — the standard Windows
+    /// API for this. Shared by the Appearance picker (<see cref="PopulateFontFamilies"/>), the
+    /// remote "FontFamily" setter's validation (<see cref="SetRemoteField"/>), and the MCP
+    /// server's list-fonts tool (via <see cref="App.ListFontsRemote"/>) — one source of truth.</summary>
+    public static List<string> GetInstalledFontFamilies() =>
+        new System.Drawing.Text.InstalledFontCollection()
+            .Families.Select(f => f.Name)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>Populates the font family picker from fonts actually installed on this PC
+    /// (not a fixed hardcoded list) via System.Drawing.Text.InstalledFontCollection — the
+    /// standard Windows API for enumerating installed font families.</summary>
+    private void PopulateFontFamilies()
+    {
+        var installed = GetInstalledFontFamilies();
+        FontFamilyCombo.ItemsSource = installed;
+
+        var current = ViewModel.ScrollTab.FontFamily;
+        FontFamilyCombo.SelectedItem = installed.Contains(current) ? current : installed.FirstOrDefault();
+    }
 
     // ── Settings tab — audio devices ──────────────────────────────────────────
 
@@ -700,6 +1081,35 @@ public sealed partial class ControllerWindow : Window
 
         InputDeviceCombo.SelectedIndex  = inputIdx  >= 0 ? inputIdx  : -1;
         OutputDeviceCombo.SelectedIndex = outputIdx >= 0 ? outputIdx : -1;
+    }
+
+    // ── AI providers (Settings tab) ─────────────────────────────────────────────
+    // 6 independent cards — configuring/testing provider X here never depends on which
+    // provider is currently SELECTED for chat/transcription in the Q&A tab (that tab only
+    // picks which one to USE). See ProviderConfigDialog for the actual credential editor.
+
+    private void PopulateProviderStatuses()
+    {
+        AzureProviderStatus.Text     = ProviderStatusText(!string.IsNullOrEmpty(App.Config.Current.Azure.Endpoint) && !string.IsNullOrEmpty(App.Config.Current.Azure.Key));
+        OpenAiProviderStatus.Text    = ProviderStatusText(!string.IsNullOrEmpty(App.Config.Current.OpenAi.Key));
+        GroqProviderStatus.Text      = ProviderStatusText(!string.IsNullOrEmpty(App.Config.Current.Groq.Key));
+        AnthropicProviderStatus.Text = ProviderStatusText(!string.IsNullOrEmpty(App.Config.Current.Anthropic.Key));
+        GeminiProviderStatus.Text    = ProviderStatusText(!string.IsNullOrEmpty(App.Config.Current.Gemini.Key));
+        MistralProviderStatus.Text   = ProviderStatusText(!string.IsNullOrEmpty(App.Config.Current.Mistral.Key));
+    }
+
+    private static string ProviderStatusText(bool configured) =>
+        configured ? "✓ Configured" : "Not configured";
+
+    private async void ConfigureProviderCard_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is not string providerKey) return;
+        var dialog = new ProviderConfigDialog(App.Config, App.AiChat, providerKey)
+        {
+            XamlRoot = Content.XamlRoot,
+        };
+        await dialog.ShowAsync();
+        PopulateProviderStatuses(); // reflect whatever was just Saved (or not, if Cancelled)
     }
 
     private void AudioSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -743,6 +1153,51 @@ public sealed partial class ControllerWindow : Window
         _populatingUi = true;
         try { PopulateAudioDevices(); }
         finally { _populatingUi = false; }
+    }
+
+    // ── Mic level test (Settings tab) ──────────────────────────────────────────
+    // Reuses AudioService's existing voice-monitor RMS plumbing (the same one behind the
+    // Script tab's Voice scroll mode indicator) rather than a second capture path. AudioService
+    // only supports ONE monitor at a time, so if Voice scroll mode currently owns it, starting a
+    // test switches scroll mode to Manual first (which itself calls StopVoiceMonitor via
+    // OverlayViewModel.OnScrollModeChanged) to free it up, rather than refusing or silently
+    // stealing it out from under Voice mode without telling the user.
+
+    private bool _micTestActive;
+
+    private void MicTestToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (_micTestActive) { StopMicTest(); return; }
+
+        if (Overlay?.ViewModel.ScrollMode == ViewModels.ScrollMode.Voice)
+        {
+            ScrollManualRadio.IsChecked = true; // frees the single mic-monitor slot Voice mode was using
+            MicTestStatusText.Text = "ℹ Switched scroll mode to Manual (Voice mode was using the microphone monitor).";
+        }
+        else
+        {
+            MicTestStatusText.Text = "";
+        }
+
+        _micTestActive = true;
+        MicTestPanel.Visibility = Visibility.Visible;
+        App.Audio.StartVoiceMonitor(OnMicTestRms, App.Config.Current.AudioDeviceId);
+    }
+
+    private void OnMicTestRms(float rms) => DispatcherQueue.TryEnqueue(() =>
+    {
+        MicTestLevelBar.Value  = rms;
+        MicTestLevelText.Text  = $"{rms:F1}";
+    });
+
+    private void StopMicTest()
+    {
+        if (!_micTestActive) return;
+        _micTestActive = false;
+        App.Audio.StopVoiceMonitor();
+        MicTestToggle.IsChecked  = false;
+        MicTestPanel.Visibility  = Visibility.Collapsed;
+        MicTestStatusText.Text   = "";
     }
 
     // ── Window stealth ────────────────────────────────────────────────────────
@@ -819,6 +1274,7 @@ public sealed partial class ControllerWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
+        StopMicTest();
         _embedService.Dispose();
 
         // Restore any stealthed windows before quitting

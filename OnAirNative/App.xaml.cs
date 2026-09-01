@@ -18,6 +18,7 @@ public partial class App : Application
     public static HotkeyService     Hotkeys    { get; private set; } = null!;
     public static TrayService       Tray       { get; private set; } = null!;
     public static UpdateService     Update     { get; private set; } = null!;
+    public static RemoteControlService? RemoteControl { get; private set; }
 
     private OverlayWindow?    _overlay;
     private ControllerWindow? _controller;
@@ -107,6 +108,17 @@ public partial class App : Application
         Tray.Start();
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} TrayService started\n");
 
+        // Stream Deck remote control — localhost-only WebSocket server, user-toggleable from
+        // the Settings tab (Config.RemoteControlEnabled). Best-effort: a failure here (e.g. the
+        // port is already in use) must never prevent the app itself from starting.
+        if (Config.Current.RemoteControlEnabled)
+            StartRemoteControl();
+        else
+            File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} RemoteControlService not started (disabled in settings)\n");
+        // PopulateStaticUi() already ran (triggered by _controller.Activate() above, before this
+        // point) and read App.RemoteControl too early — refresh now that start/skip is decided.
+        _controller.RefreshRemoteControlStatusText();
+
         // Handle .txt file opened via right-click → "Open with onAIr"
         var activationArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
         HandleActivation(activationArgs);
@@ -118,6 +130,7 @@ public partial class App : Application
             Config.Save();
             Hotkeys.Dispose();
             Tray.Dispose();
+            RemoteControl?.Dispose();
             Audio.Dispose();
             Whisper.Dispose();
             AiChat.Dispose();
@@ -126,7 +139,15 @@ public partial class App : Application
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} LaunchCore done\n");
     }
 
-    private void OnHotkeyTriggered(object? sender, HotkeyAction action)
+    private void OnHotkeyTriggered(object? sender, HotkeyAction action) => ExecuteAction(action);
+
+    /// <summary>
+    /// Executes a <see cref="HotkeyAction"/> against the live windows/services — the single
+    /// dispatch point shared by the physical global hotkeys (<see cref="HotkeyService"/>) and
+    /// the Stream Deck remote control WebSocket (<see cref="RemoteControlService"/>), so both
+    /// input sources can never drift out of sync with each other's behavior.
+    /// </summary>
+    public void ExecuteAction(HotkeyAction action)
     {
         switch (action)
         {
@@ -175,7 +196,97 @@ public partial class App : Application
             case HotkeyAction.DecreaseFontSize:
                 _controller?.AdjustFontSize(-1);
                 break;
+            case HotkeyAction.IncreaseVoiceScrollSpeed:
+                _controller?.AdjustVoiceScrollSpeed(+1);
+                break;
+            case HotkeyAction.DecreaseVoiceScrollSpeed:
+                _controller?.AdjustVoiceScrollSpeed(-1);
+                break;
+            case HotkeyAction.IncreaseScrollStep:
+                _controller?.AdjustScrollStep(+1);
+                break;
+            case HotkeyAction.DecreaseScrollStep:
+                _controller?.AdjustScrollStep(-1);
+                break;
+            case HotkeyAction.IncreaseVoiceThreshold:
+                _controller?.AdjustVoiceThreshold(+1);
+                break;
+            case HotkeyAction.DecreaseVoiceThreshold:
+                _controller?.AdjustVoiceThreshold(-1);
+                break;
+            case HotkeyAction.RecheckWhisperModel:
+                _controller?.RecheckWhisperModel();
+                break;
         }
+        RemoteControl?.NotifyStateMayHaveChanged();
+    }
+
+    /// <summary>Builds a snapshot of the current, remotely-interesting app state — consumed by
+    /// <see cref="RemoteControlService"/> to push to the Stream Deck plugin.</summary>
+    public RemoteState GetRemoteState() => _controller?.GetRemoteState() ?? new RemoteState();
+
+    /// <summary>Applies an absolute setter value by field name — the MCP server's write path
+    /// (e.g. "set font size to 24"), as opposed to the relative Increase/Decrease
+    /// <see cref="HotkeyAction"/>s used by physical hotkeys/dials. Delegates to
+    /// <see cref="ControllerWindow.SetRemoteField"/>, which owns the actual validation (same
+    /// clamps/regex the UI itself uses) since it alone has the live slider bounds/font list.</summary>
+    public (bool Success, string? Error) SetRemoteField(string field, System.Text.Json.JsonElement value)
+        => _controller?.SetRemoteField(field, value) ?? (false, "Controller not ready");
+
+    /// <summary>Loads a script by explicit file path — the MCP server's non-interactive
+    /// alternative to <see cref="HotkeyAction.OpenFile"/> (which pops the file picker UI).
+    /// Validates existence/extension itself before delegating to the same
+    /// <see cref="ViewModels.OverlayViewModel.LoadScriptAsync"/> the file picker uses.</summary>
+    public async Task<(bool Success, string? Error)> LoadScriptRemoteAsync(string path)
+    {
+        if (_overlay is null) return (false, "Overlay not ready");
+        if (string.IsNullOrWhiteSpace(path)) return (false, "Path is required");
+        if (!string.Equals(Path.GetExtension(path), ".txt", StringComparison.OrdinalIgnoreCase))
+            return (false, "Only .txt files are supported");
+        if (!File.Exists(path)) return (false, $"File not found: {path}");
+
+        await _overlay.ViewModel.LoadScriptAsync(path);
+        RemoteControl?.NotifyStateMayHaveChanged();
+        return (true, null);
+    }
+
+    /// <summary>Returns the currently loaded script's full text — the MCP server's read path
+    /// for "what's on the teleprompter right now".</summary>
+    public string GetScriptTextRemote() => _overlay?.ViewModel.ScriptText ?? "";
+
+    /// <summary>Returns every font family installed on this PC — same source
+    /// <see cref="Views.ControllerWindow.PopulateFontFamilies"/> uses for the Appearance picker,
+    /// so the MCP server's "list fonts" tool and the Settings UI can never disagree.</summary>
+    public List<string> ListFontsRemote() => Views.ControllerWindow.GetInstalledFontFamilies();
+
+    /// <summary>Starts the Stream Deck remote control WebSocket server if it isn't already
+    /// running. Best-effort: a bind failure (e.g. the port is already in use) is logged, never
+    /// thrown — called both at launch (when enabled in settings) and from the Settings tab's
+    /// on/off toggle.</summary>
+    public void StartRemoteControl()
+    {
+        if (RemoteControl is not null || _uiQueue is null) return;
+        var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "onAIr", "launch.log");
+        try
+        {
+            RemoteControl = new RemoteControlService(
+                ExecuteAction, GetRemoteState, _uiQueue,
+                SetRemoteField, LoadScriptRemoteAsync, GetScriptTextRemote, ListFontsRemote);
+            RemoteControl.Start();
+            File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} RemoteControlService started on port {RemoteControlService.Port}\n");
+        }
+        catch (Exception ex)
+        {
+            RemoteControl = null;
+            File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} RemoteControlService failed to start: {ex.Message}\n");
+        }
+    }
+
+    /// <summary>Stops and disposes the Stream Deck remote control server, if running.</summary>
+    public void StopRemoteControl()
+    {
+        RemoteControl?.Dispose();
+        RemoteControl = null;
     }
 
     // Called on the PRIMARY instance (via Program.OnActivated) when a second

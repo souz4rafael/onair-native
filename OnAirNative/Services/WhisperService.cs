@@ -23,13 +23,23 @@ public sealed class WhisperService : IDisposable
 
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(90) };
 
+    // whisper.net's native WhisperProcessor (whisper.cpp under the hood) is not safe to
+    // invoke concurrently from two callers on the same instance — e.g. a live-preview
+    // tick (OverlayViewModel.LivePreviewTick) racing the final post-recording
+    // transcription. A concurrent second call into the native context can corrupt its
+    // internal state and crash the whole process natively, with no managed exception
+    // to catch and no entry in crash.log/launch.log — exactly the silent-death symptom
+    // this gate fixes. Every TranscribeAsync call — local or cloud — is serialized
+    // through it, since there's no benefit to parallelising HTTP calls here either.
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
     public bool IsLocalModelLoaded => _factory is not null;
 
     // ── Local model management ────────────────────────────────────────────────
 
     public async Task<bool> LoadModelAsync(string modelPath)
     {
-        if (_loadedPath == modelPath) return true;
+        if (_loadedPath == modelPath && _factory is not null) return true;
         try
         {
             _processor?.Dispose();
@@ -46,22 +56,47 @@ public sealed class WhisperService : IDisposable
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Whisper] Model load failed: {ex.Message}");
-            _factory   = null;
-            _processor = null;
+            _factory    = null;
+            _processor  = null;
+            _loadedPath = null; // so retrying the same path doesn't short-circuit on the stale hit above
             return false;
         }
     }
 
+    /// <summary>
+    /// Unloads the local model, if any — used when the user clears the model path (switching
+    /// back to the cloud API) or the configured file is no longer found. Without this,
+    /// <see cref="IsLocalModelLoaded"/> stayed permanently true after the first successful
+    /// local load: nothing ever reset <see cref="_factory"/> back to null when the path was
+    /// cleared, so the app kept reporting "local" even after the user switched back to cloud.
+    /// </summary>
+    public void UnloadModel()
+    {
+        _processor?.Dispose();
+        _factory?.Dispose();
+        _processor  = null;
+        _factory    = null;
+        _loadedPath = null;
+    }
+
     // ── Public transcription entry point ──────────────────────────────────────
 
-    public Task<TranscriptionResult> TranscribeAsync(byte[] wavData, AppConfig cfg)
+    public async Task<TranscriptionResult> TranscribeAsync(byte[] wavData, AppConfig cfg)
     {
         if (wavData.Length == 0)
-            return Task.FromResult(new TranscriptionResult(false, Error: "No audio was recorded."));
+            return new TranscriptionResult(false, Error: "No audio was recorded.");
 
-        return IsLocalModelLoaded
-            ? TranscribeLocalAsync(wavData)
-            : TranscribeViaApiAsync(wavData, cfg);
+        await _gate.WaitAsync();
+        try
+        {
+            return IsLocalModelLoaded
+                ? await TranscribeLocalAsync(wavData)
+                : await TranscribeViaApiAsync(wavData, cfg);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     // ── Local (whisper.net) ───────────────────────────────────────────────────
@@ -162,5 +197,6 @@ public sealed class WhisperService : IDisposable
         _processor?.Dispose();
         _factory?.Dispose();
         _http.Dispose();
+        _gate.Dispose();
     }
 }

@@ -12,6 +12,15 @@
          The windows also call AppWindow.SetIcon at runtime (see WindowService.SetWindowIcon)
          since an unpackaged WinUI 3 window does not pick up the exe icon on its own. -->
     <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
+    <!-- Force x64 as the resolved $(Platform) even when a build doesn't go through the
+         .sln / doesn't pass -p:Platform=x64 explicitly (e.g. `dotnet build` run directly
+         against this .csproj, or Visual Studio with "Any CPU" left selected in the
+         Solution Platform dropdown). Without this, MSBuild's default $(Platform) is
+         "AnyCPU", which — since AnyCPU != x64 — writes to a completely different,
+         un-synced output folder (bin\Debug\... instead of bin\x64\Debug\...). That stale
+         copy silently stops receiving new builds while still being a runnable exe, which
+         is exactly the kind of "I tested it and nothing changed" trap this prevents. -->
+    <Platform Condition="'$(Platform)' == '' Or '$(Platform)' == 'AnyCPU'">x64</Platform>
     <Platforms>x64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
@@ -53,11 +62,31 @@
     <Content Include="Assets\app-icon.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- Packaged Stream Deck plugin (built from ..\streamdeck-plugin via `streamdeck pack`) —
+         bundled so the Settings tab's "Install Stream Deck Plugin" button can hand it off to
+         the Stream Deck app without requiring Node.js/npm on the end user's machine. Rebuild
+         with `streamdeck pack com.souz4rafael.onair.sdPlugin -o dist -f` from streamdeck-plugin\
+         after any plugin change, then copy the output here as onair-remote.streamDeckPlugin. -->
+    <Content Include="Assets\onair-remote.streamDeckPlugin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!-- Packaged onAIr MCP server (built from ..\mcp-server via dotnet publish -c Release) —
+         bundled so Settings tab's "MCP Tools & Setup…" dialog can always show a real, working
+         absolute path to register with an MCP client (Claude Desktop, VS Code Copilot Chat,
+         etc.), regardless of whether this is a dev build or an installed copy. Framework
+         dependent publish (not self-contained) — fine since onAIr itself already requires the
+         .NET 8 x64 runtime to run at all. Rebuild via: dotnet publish -c Release -o publish
+         (self contained false) from mcp-server\, then copy publish\* here (minus the .pdb —
+         not needed at runtime) after any mcp-server change. -->
+    <Content Include="Assets\mcp-server\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
     <!-- Windows App SDK — provides WinUI 3, AppWindow, WebView2, etc. -->
     <!-- Run: dotnet add package Microsoft.WindowsAppSDK -->
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Primitives" Version="8.2.251219" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.1.3" />
     <!-- Windows SDK build tools (required by WinUI 3 codegen) -->
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.1839" PrivateAssets="all" />
@@ -77,6 +106,11 @@
 
     <!-- DPAPI secret-at-rest encryption for API keys (ProtectedData) -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+
+    <!-- Enumerates fonts actually installed on the user's PC for the Appearance font-family
+         picker (System.Drawing.Text.InstalledFontCollection). Windows-only API — safe here
+         since the TFM is already net8.0-windows10.0.19041.0 (no CA1416 warnings). -->
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
   </ItemGroup>
 
   <!--
@@ -124,10 +158,7 @@
     publish output to fix this.
   -->
   <Target Name="CopyPriToPublish" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
-    <Copy SourceFiles="$(OutDir)$(AssemblyName).pri"
-          DestinationFolder="$(PublishDir)"
-          SkipUnchangedFiles="true"
-          Condition="Exists('$(OutDir)$(AssemblyName).pri')" />
+    <Copy SourceFiles="$(OutDir)$(AssemblyName).pri" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" Condition="Exists('$(OutDir)$(AssemblyName).pri')" />
   </Target>
 
 </Project>

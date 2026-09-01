@@ -13,6 +13,7 @@ public partial class ControllerViewModel : ObservableObject
     [ObservableProperty] private bool _controllerProtected;
     [ObservableProperty] private bool _overlayProtected;
     [ObservableProperty] private string _theme = "System";
+    [ObservableProperty] private bool _remoteControlEnabled = true;
 
     private readonly ConfigService    _config;
     private readonly OverlayViewModel _overlay;
@@ -21,17 +22,19 @@ public partial class ControllerViewModel : ObservableObject
         ConfigService config,
         OverlayViewModel overlay,
         AiChatService ai,
+        WhisperService whisper,
         UpdateService update)
     {
         _config  = config;
         _overlay = overlay;
 
-        ControllerProtected = config.Current.ControllerProtected;
-        OverlayProtected    = config.Current.OverlayProtected;
-        Theme               = config.Current.Theme;
+        ControllerProtected  = config.Current.ControllerProtected;
+        OverlayProtected     = config.Current.OverlayProtected;
+        Theme                = config.Current.Theme;
+        RemoteControlEnabled = config.Current.RemoteControlEnabled;
 
         ScrollTab = new ScrollTabViewModel(config, overlay);
-        AiTab     = new AiTabViewModel(config, ai);
+        AiTab     = new AiTabViewModel(config, ai, whisper);
         AboutTab  = new AboutTabViewModel(update);
     }
 
@@ -53,6 +56,12 @@ public partial class ControllerViewModel : ObservableObject
         ThemeChanged?.Invoke(this, value);
     }
 
+    partial void OnRemoteControlEnabledChanged(bool value)
+    {
+        _config.Current.RemoteControlEnabled = value;
+        RemoteControlEnabledChanged?.Invoke(this, value);
+    }
+
     /// <summary>Raised when the Controller screen-share protection toggle changes.</summary>
     public event EventHandler<bool>? ControllerProtectionChanged;
 
@@ -64,4 +73,8 @@ public partial class ControllerViewModel : ObservableObject
 
     /// <summary>Raised when the app theme changes ("System" | "Light" | "Dark").</summary>
     public event EventHandler<string>? ThemeChanged;
+
+    /// <summary>Raised when the user toggles the Stream Deck remote control server on/off —
+    /// the View wires this to App.StartRemoteControl()/StopRemoteControl().</summary>
+    public event EventHandler<bool>? RemoteControlEnabledChanged;
 }

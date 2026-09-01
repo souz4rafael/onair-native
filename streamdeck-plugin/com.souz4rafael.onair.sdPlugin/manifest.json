@@ -1,0 +1,382 @@
+{
+    "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+    "UUID": "com.souz4rafael.onair",
+    "Name": "onAIr Remote",
+    "Author": "Rafael Souza",
+    "Description": "Remote control for the onAIr teleprompter: toggle the TP, lock it, hide it from screen share, start/stop Q&A recording, and adjust opacity/font size/scroll settings with Stream Deck+ dials.",
+    "Icon": "imgs/plugin/category-icon",
+    "URL": "https://github.com/souz4rafael/onair-native",
+    "Version": "0.1.0.0",
+    "SDKVersion": 2,
+    "Software": {
+        "MinimumVersion": "6.6"
+    },
+    "OS": [
+        {
+            "Platform": "windows",
+            "MinimumVersion": "10"
+        }
+    ],
+    "Nodejs": {
+        "Version": "20"
+    },
+    "CodePath": "bin/plugin.js",
+    "Category": "onAIr Remote",
+    "CategoryIcon": "imgs/plugin/category-icon",
+    "ApplicationsToMonitor": {
+        "windows": [
+            "OnAirNative.exe"
+        ]
+    },
+    "Actions": [
+        {
+            "Name": "Open / Close TP",
+            "UUID": "com.souz4rafael.onair.toggle-tp",
+            "Icon": "imgs/actions/toggle-tp/icon",
+            "Tooltip": "Toggles the onAIr teleprompter window open or hidden. Icon reflects the TP's current state.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/toggle-tp/closed",
+                    "Name": "Closed",
+                    "Title": "Open TP",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                },
+                {
+                    "Image": "imgs/actions/toggle-tp/open",
+                    "Name": "Open",
+                    "Title": "Close TP",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Lock / Unlock TP",
+            "UUID": "com.souz4rafael.onair.lock-tp",
+            "Icon": "imgs/actions/lock-tp/icon",
+            "Tooltip": "Locks the TP (click-through, drag/resize disabled) or unlocks it for repositioning. Icon reflects the current lock state.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/lock-tp/unlocked",
+                    "Name": "Unlocked",
+                    "Title": "Lock TP",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                },
+                {
+                    "Image": "imgs/actions/lock-tp/locked",
+                    "Name": "Locked",
+                    "Title": "Unlock TP",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Hide TP in Share",
+            "UUID": "com.souz4rafael.onair.hide-tp-share",
+            "Icon": "imgs/actions/hide-tp-share/icon",
+            "Tooltip": "Toggles whether the TP is visible to viewers of a shared screen/recording — matches the Controller's own 'Hide TP' footer button. Icon reflects the current state.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/hide-tp-share/visible",
+                    "Name": "Visible",
+                    "Title": "Hide TP",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                },
+                {
+                    "Image": "imgs/actions/hide-tp-share/hidden",
+                    "Name": "Hidden",
+                    "Title": "Show TP",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Hide Controller in Share",
+            "UUID": "com.souz4rafael.onair.hide-controller-share",
+            "Icon": "imgs/actions/hide-controller-share/icon",
+            "Tooltip": "Toggles whether the Controller window is visible to viewers of a shared screen/recording — matches the Controller's own 'Hide Controller' footer button. Icon reflects the current state.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/hide-controller-share/visible",
+                    "Name": "Visible",
+                    "Title": "Hide Controller",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                },
+                {
+                    "Image": "imgs/actions/hide-controller-share/hidden",
+                    "Name": "Hidden",
+                    "Title": "Show Controller",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Start / Stop Recording",
+            "UUID": "com.souz4rafael.onair.recording",
+            "Icon": "imgs/actions/recording/icon",
+            "Tooltip": "Starts or stops a Q&A recording. Icon reflects whether onAIr is currently recording.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/recording/idle",
+                    "Name": "Idle",
+                    "Title": "Record",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                },
+                {
+                    "Image": "imgs/actions/recording/recording",
+                    "Name": "Recording",
+                    "Title": "Stop",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "AI Status",
+            "UUID": "com.souz4rafael.onair.status",
+            "Icon": "imgs/actions/status/icon",
+            "Tooltip": "Shows the active AI provider (cloud or local Whisper) and model status. Press to force onAIr to re-check whether the local model is actually loaded.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "UserTitleEnabled": false,
+            "States": [
+                {
+                    "Image": "imgs/actions/status/status",
+                    "Name": "Status",
+                    "TitleAlignment": "middle",
+                    "FontSize": 11
+                }
+            ]
+        },
+        {
+            "Name": "Release App Stealth",
+            "UUID": "com.souz4rafael.onair.release-stealth",
+            "Icon": "imgs/actions/release-stealth/icon",
+            "Tooltip": "Releases the App Stealth container, if a window is currently embedded.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/release-stealth/icon",
+                    "Title": "Release Stealth",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Open Script File",
+            "UUID": "com.souz4rafael.onair.open-file",
+            "Icon": "imgs/actions/open-file/icon",
+            "Tooltip": "Opens the script file picker.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/open-file/icon",
+                    "Title": "Open File",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Scroll Up",
+            "UUID": "com.souz4rafael.onair.scroll-up",
+            "Icon": "imgs/actions/scroll-up/icon",
+            "Tooltip": "Scrolls the script up one step (Manual mode) — same as the Controller's ▲ virtual scroll button.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/scroll-up/icon",
+                    "Title": "Scroll Up",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Scroll Down",
+            "UUID": "com.souz4rafael.onair.scroll-down",
+            "Icon": "imgs/actions/scroll-down/icon",
+            "Tooltip": "Scrolls the script down one step (Manual mode) — same as the Controller's ▼ virtual scroll button.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/scroll-down/icon",
+                    "Title": "Scroll Down",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "TP Opacity",
+            "UUID": "com.souz4rafael.onair.dial-opacity",
+            "Icon": "imgs/actions/dial-opacity/icon",
+            "Tooltip": "Rotate to adjust TP opacity. Press the button/dial to see the current value on the touch strip.",
+            "Controllers": [
+                "Keypad",
+                "Encoder"
+            ],
+            "Encoder": {
+                "layout": "dial-layout.json",
+                "TriggerDescription": {
+                    "Rotate": "Adjust opacity"
+                }
+            },
+            "States": [
+                {
+                    "Image": "imgs/actions/dial-opacity/key",
+                    "Title": "Opacity",
+                    "TitleAlignment": "bottom"
+                }
+            ]
+        },
+        {
+            "Name": "TP Font Size",
+            "UUID": "com.souz4rafael.onair.dial-font-size",
+            "Icon": "imgs/actions/dial-font-size/icon",
+            "Tooltip": "Rotate to adjust the script font size on the TP.",
+            "Controllers": [
+                "Keypad",
+                "Encoder"
+            ],
+            "Encoder": {
+                "layout": "dial-layout.json",
+                "TriggerDescription": {
+                    "Rotate": "Adjust font size"
+                }
+            },
+            "States": [
+                {
+                    "Image": "imgs/actions/dial-font-size/key",
+                    "Title": "Font Size",
+                    "TitleAlignment": "bottom"
+                }
+            ]
+        },
+        {
+            "Name": "Auto-Scroll Speed",
+            "UUID": "com.souz4rafael.onair.dial-scroll-speed",
+            "Icon": "imgs/actions/dial-scroll-speed/icon",
+            "Tooltip": "Rotate to adjust Auto mode's scroll speed.",
+            "Controllers": [
+                "Keypad",
+                "Encoder"
+            ],
+            "Encoder": {
+                "layout": "dial-layout.json",
+                "TriggerDescription": {
+                    "Rotate": "Adjust Auto-scroll speed"
+                }
+            },
+            "States": [
+                {
+                    "Image": "imgs/actions/dial-scroll-speed/key",
+                    "Title": "Auto Speed",
+                    "TitleAlignment": "bottom"
+                }
+            ]
+        },
+        {
+            "Name": "Voice Scroll Speed",
+            "UUID": "com.souz4rafael.onair.dial-voice-scroll-speed",
+            "Icon": "imgs/actions/dial-voice-scroll-speed/icon",
+            "Tooltip": "Rotate to adjust Voice mode's scroll speed.",
+            "Controllers": [
+                "Keypad",
+                "Encoder"
+            ],
+            "Encoder": {
+                "layout": "dial-layout.json",
+                "TriggerDescription": {
+                    "Rotate": "Adjust Voice scroll speed"
+                }
+            },
+            "States": [
+                {
+                    "Image": "imgs/actions/dial-voice-scroll-speed/key",
+                    "Title": "Voice Speed",
+                    "TitleAlignment": "bottom"
+                }
+            ]
+        },
+        {
+            "Name": "Manual Scroll Step",
+            "UUID": "com.souz4rafael.onair.dial-scroll-step",
+            "Icon": "imgs/actions/dial-scroll-step/icon",
+            "Tooltip": "Rotate to adjust Manual mode's scroll step (pixels per press).",
+            "Controllers": [
+                "Keypad",
+                "Encoder"
+            ],
+            "Encoder": {
+                "layout": "dial-layout.json",
+                "TriggerDescription": {
+                    "Rotate": "Adjust scroll step"
+                }
+            },
+            "States": [
+                {
+                    "Image": "imgs/actions/dial-scroll-step/key",
+                    "Title": "Scroll Step",
+                    "TitleAlignment": "bottom"
+                }
+            ]
+        },
+        {
+            "Name": "Voice Scroll Sensitivity",
+            "UUID": "com.souz4rafael.onair.dial-voice-threshold",
+            "Icon": "imgs/actions/dial-voice-threshold/icon",
+            "Tooltip": "Rotate to adjust Voice mode's scroll sensitivity (lower = more sensitive).",
+            "Controllers": [
+                "Keypad",
+                "Encoder"
+            ],
+            "Encoder": {
+                "layout": "dial-layout.json",
+                "TriggerDescription": {
+                    "Rotate": "Adjust Voice sensitivity"
+                }
+            },
+            "States": [
+                {
+                    "Image": "imgs/actions/dial-voice-threshold/key",
+                    "Title": "Sensitivity",
+                    "TitleAlignment": "bottom"
+                }
+            ]
+        }
+    ]
+}

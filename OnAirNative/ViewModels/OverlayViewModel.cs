@@ -42,9 +42,16 @@ public partial class OverlayViewModel : ObservableObject
     [ObservableProperty] private string _qaAnswer     = "";
     [ObservableProperty] private string _qaStatus     = "";
 
+    // Rolling, best-effort transcript shown live *while* recording — only active when a
+    // local Whisper model is loaded (re-transcribing on a timer against a cloud API would
+    // spam paid/rate-limited requests). Cleared the moment recording stops, right before
+    // the final full-buffer transcription (QaQuestion) replaces it. See StartLivePreview.
+    [ObservableProperty] private string _livePreviewText = "";
+
     [ObservableProperty] private double _opacity   = 0.75;
     [ObservableProperty] private int    _fontSize  = 22;
     [ObservableProperty] private string _fontColor = "#F0F0F0";
+    [ObservableProperty] private string _fontFamily = "Segoe UI";
 
     // Voice-scroll indicators
     [ObservableProperty] private bool   _isVoiceActive = false;
@@ -66,9 +73,10 @@ public partial class OverlayViewModel : ObservableObject
         _uiQueue = DispatcherQueue.GetForCurrentThread();
 
         var a = config.Current.Appearance;
-        Opacity   = a.Opacity / 100.0;
-        FontSize  = a.FontSize;
-        FontColor = a.FontColor;
+        Opacity    = a.Opacity / 100.0;
+        FontSize   = a.FontSize;
+        FontColor  = a.FontColor;
+        FontFamily = a.FontFamily;
     }
 
     // ── Scroll mode changes ───────────────────────────────────────────────────
@@ -167,6 +175,83 @@ public partial class OverlayViewModel : ObservableObject
             _uiQueue.TryEnqueue(() => { IsVoiceActive = active; MicLevel = Math.Round(rms, 1); });
     }
 
+    // ── Live transcript preview (local Whisper only, while recording) ────────
+    //
+    // "Poor man's streaming": every tick, re-transcribe everything captured so far from
+    // scratch (AudioService.PeekRecordedAudio doesn't stop capture) and show the result as
+    // a live, still-growing preview in the Box. True incremental/VAD-based streaming
+    // (à la whisper.cpp's stream.cpp) would avoid the repeated work, but is meaningfully
+    // more engineering for this app's use case (short Q&A questions, not long dictation).
+    //
+    // An earlier version windowed this to a trailing N seconds to keep re-transcription
+    // roughly constant-time — but re-transcribing a disjoint slice from scratch every tick
+    // meant the preview jumped between unrelated fragments and erased whatever was shown a
+    // moment before, instead of reading like a transcript that grows as you talk. Given a
+    // reasonably fast (non-medium/large) local model and this feature's target of short
+    // clips, re-transcribing the whole buffer each tick is worth the simpler, more
+    // intuitive result — see AudioService.PeekRecordedAudio for the same trade-off from
+    // the audio side. A late-arriving result is still discarded once recording has already
+    // stopped (see the IsRecording check in LivePreviewTick below).
+    private const int LivePreviewIntervalMs = 2500;
+
+    private DispatcherTimer? _livePreviewTimer;
+    private bool             _livePreviewInFlight;
+
+    private void StartLivePreview()
+    {
+        if (!_whisper.IsLocalModelLoaded) return; // cloud API: don't spam paid requests
+
+        _livePreviewTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(LivePreviewIntervalMs),
+        };
+        _livePreviewTimer.Tick += LivePreviewTick;
+        _livePreviewTimer.Start();
+    }
+
+    private void StopLivePreview()
+    {
+        if (_livePreviewTimer is not null)
+        {
+            _livePreviewTimer.Stop();
+            _livePreviewTimer.Tick -= LivePreviewTick;
+            _livePreviewTimer = null;
+        }
+        LivePreviewText = "";
+    }
+
+    private async void LivePreviewTick(object? sender, object e)
+    {
+        // Skip if the previous tick's transcription is still running — cheaper than
+        // queuing up overlapping Whisper calls if a slow tick falls behind the timer.
+        if (_livePreviewInFlight || !IsRecording) return;
+        _livePreviewInFlight = true;
+        try
+        {
+            var wav = _audio.PeekRecordedAudio();
+            if (wav.Length == 0) return;
+
+            var result = await _whisper.TranscribeAsync(wav, _config.Current);
+            if (result.Success && IsRecording) // still recording when the result comes back?
+                LivePreviewText = result.Text;
+        }
+        catch (Exception ex)
+        {
+            // Best-effort feature — never let a live-preview failure take down the whole
+            // app (this is an `async void` timer handler, so an uncaught exception here
+            // would otherwise be unrecoverable). Logged for diagnosis; the final,
+            // full-buffer transcription after Stop is unaffected either way.
+            var logDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "onAIr");
+            try { File.AppendAllText(Path.Combine(logDir, "live-preview.log"), $"{DateTime.Now:HH:mm:ss.fff} {ex}\n"); }
+            catch { /* logging is best-effort too */ }
+        }
+        finally
+        {
+            _livePreviewInFlight = false;
+        }
+    }
+
     // ── Move mode (Ctrl+Alt+Home) ─────────────────────────────────────────────
 
     public void ToggleMoveMode() => SetMoveMode(!IsMoveModeActive);
@@ -221,6 +306,7 @@ public partial class OverlayViewModel : ObservableObject
         {
             // Stop recording → transcribe → AI answer
             IsRecording = false;
+            StopLivePreview(); // no more ticks once the real, full-buffer transcription starts
             IsBusy      = true;
             QaStatus    = "Transcribing…";
 
@@ -258,6 +344,7 @@ public partial class OverlayViewModel : ObservableObject
             QaStatus    = "Recording… (Ctrl+Alt+R to stop)";
             IsRecording = true;
             await _audio.StartRecordingAsync(_config.Current.AudioRecordingSource, _config.Current.AudioDeviceId);
+            StartLivePreview();
         }
     }
 
@@ -280,6 +367,7 @@ public partial class OverlayViewModel : ObservableObject
     {
         StopAutoScroll();
         StopVoiceScrollTimer();
+        StopLivePreview();
         _audio.StopVoiceMonitor();
     }
 }

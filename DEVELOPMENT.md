@@ -13,14 +13,20 @@ Use this file to resume development in a new session. Tell Copilot:
   ```powershell
   cd "...\Microsoft Scout\OnAirNative"
   dotnet build OnAirNative\OnAirNative.csproj -c Debug
-  # exe: OnAirNative\bin\Debug\net8.0-windows10.0.19041.0\OnAirNative.exe
+  # exe: OnAirNative\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\OnAirNative.exe
   ```
-- **Current version:** 1.1.0 — bump it in **two** places, they must stay in sync:
-  `OnAirNative/ViewModels/AboutTabViewModel.cs` (`Version`) and
-  `installer/onair-native.nsi` (`PRODUCT_VERSION`).
-- **Releases:** https://github.com/souz4rafael/onair-native/releases (latest published: v1.1.0)
+  The project is x64-only (`<Platforms>x64</Platforms>` in the .csproj, self-contained win-x64
+  deploy), and the .csproj now forces `$(Platform)=x64` even when a build doesn't specify it
+  explicitly — see the "Build output: two output folders" pitfall below for why that matters.
+- **Current version:** 1.2.0 — bump it in **three** places, they must stay in sync:
+  `OnAirNative/ViewModels/AboutTabViewModel.cs` (`Version`),
+  `installer/onair-native.nsi` (`PRODUCT_VERSION`), and this file's version line.
+- **Releases:** https://github.com/souz4rafael/onair-native/releases (latest published: v1.1.0 —
+  v1.2.0 not yet released as of this doc update)
 - **Stack:** WinUI 3 (Windows App SDK 2.1.3), .NET 8, NAudio 2.2.1, whisper.net 1.7.3,
-  CommunityToolkit.Mvvm 8.3.2, System.Security.Cryptography.ProtectedData 8.0.0
+  CommunityToolkit.Mvvm 8.3.2, System.Security.Cryptography.ProtectedData 8.0.0, plus two sibling
+  companion projects: `streamdeck-plugin/` (Node/TS, Elgato Stream Deck plugin) and
+  `mcp-server/` (C# console app, Model Context Protocol server) — see "Remote control" below.
 
 ---
 
@@ -28,12 +34,13 @@ Use this file to resume development in a new session. Tell Copilot:
 
 User-facing vocabulary, since it's a common source of confusion if you're skimming code vs. UI:
 
-- **The Box** — what the UI calls the transparent, always-on-top teleprompter window. The
-  underlying class is still `OverlayWindow`/`OverlayViewModel` internally (renaming the class/file
-  names, XAML `x:Name`s, config field names like `OverlayProtected`, and hotkey action identifiers
-  was deliberately **not** done — no user-visible benefit, high regression risk, and it would have
-  broken existing installs' persisted `config.json` field names). Only user-facing strings (button
-  labels, tooltips, About-tab text, docs) say "Box".
+- **The TP** — short for **Teleprompter**, what the UI calls the transparent, always-on-top
+  teleprompter window (called "the Box" before this rename — see the "Status" section below).
+  The underlying class is still `OverlayWindow`/`OverlayViewModel` internally (renaming the
+  class/file names, XAML `x:Name`s, config field names like `OverlayProtected`, and hotkey action
+  identifiers was deliberately **not** done — no user-visible benefit, high regression risk, and it
+  would have broken existing installs' persisted `config.json` field names). Only user-facing
+  strings (button labels, tooltips, About-tab text, docs) say "TP".
 - **onAIr** — the app's display name, everywhere a human reads it (About tab, installer, tray,
   docs). The technical project name/namespace/exe filename (`OnAirNative`) is intentionally
   unchanged — Mission Control and other tooling reference the static `OnAirNative.exe` path, and
@@ -51,7 +58,7 @@ before XAML boots.
 Program.cs               — AppInstance.FindOrRegisterForKey("onAIr-native-main")
 │                          → RedirectActivationToAsync + exit when another instance owns the key
 └── App.xaml.cs          — service wiring, hotkey dispatch, OnRedirectedActivation
-    ├── OverlayWindow        — the Box: transparent, frameless, always-on-top (hidden by default)
+    ├── OverlayWindow        — the TP: transparent, frameless, always-on-top (hidden by default)
     │   └── OverlayViewModel — script, Q&A, scroll modes, voice
     └── ControllerWindow     — 5-tab control panel (main app window)
         └── ControllerViewModel
@@ -78,16 +85,21 @@ Services/
 
 ## Controller tabs
 
+Tab selector is a custom segmented "pill" bar (not `NavigationView` — replaced in v1.2.0), 5
+`RadioButton`s styled as pills: the selected tab shows icon+text and grows to fit (`Auto` grid
+column), the other 4 collapse to icon-only and shrink to match — see "Pill segmented tab bar"
+below for the two real WinUI bugs this surfaced.
+
 | Tab | Key features |
 |-----|-------------|
-| **Script** | Load .txt, Manual/Auto/Voice scroll (one mode-specific speed control shown at a time), font size/Box opacity/color, save/reset settings — organised into cards |
-| **Q&A** | Record button, 6 AI providers, Whisper model path, system prompt — organised into cards |
+| **Script** | Load .txt, Manual/Auto/Voice scroll (one mode-specific speed control shown at a time), font size/TP opacity/color (+ custom hex, populated by clicking any preset swatch), font family picker, save/reset settings — organised into cards |
+| **Q&A** | Record button, chat/transcription provider selection (2 dropdowns) + Test connection, Whisper model path, system prompt — organised into cards. Provider credentials are configured from Settings → AI PROVIDERS, not here (see below) |
 | **App Stealth** | Embed any Win32 app in WDA_EXCLUDEFROMCAPTURE container (interactive!) — single card |
-| **Settings** | Audio device selector, capture source (mic / system / both), voice threshold slider, System/Light/Dark theme picker — organised into cards |
+| **Settings** | Audio device selector + live mic level test, capture source (mic / system / both), 6 AI provider cards (configure/test independently), voice threshold slider, System/Light/Dark theme picker, Remote Control (Stream Deck + MCP) server toggle — organised into cards |
 | **About** | Version, hotkeys, GitHub link, update check/install — Updates and Keyboard Shortcuts organised into cards |
 
-**Footer:** a 2-column layout — the 3 Box controls (**Open Box** visible/hidden ·
-**Lock Box** locked/unlocked · **Hide Box** visible/hidden in share, `OverlayProtected`) on the
+**Footer:** a 2-column layout — the 3 TP controls (**Open TP** visible/hidden ·
+**Lock TP** locked/unlocked · **Hide TP** visible/hidden in share, `OverlayProtected`) on the
 left, **Hide Controller** (Controller capture protection) right-aligned on its own. All 4 labels
 are static (icon + fixed word) — only the pressed/checked visual reflects current state, no dynamic
 text swap. Labels are short enough to fit one row at the default Controller window width
@@ -101,16 +113,19 @@ text swap. Labels are short enough to fit one row at the default Controller wind
 | Hotkey | Action |
 |--------|--------|
 | Ctrl+Alt+PgUp/PgDn | Scroll script (Manual mode) |
-| Ctrl+Alt+Home | Lock / unlock Box (Move Mode) |
+| Ctrl+Alt+Home | Lock / unlock TP (Move Mode) |
 | Ctrl+Alt+R | Q&A record start/stop |
 | Ctrl+Alt+O | Open file picker |
-| Ctrl+Alt+] / [ | Increase / decrease Box opacity (`ControllerWindow.AdjustOpacity`) |
-| Ctrl+Alt+V | Open / hide Box (`ControllerWindow.ToggleOverlayVisibility`) |
-| Ctrl+Alt+S | Hide / show Box in share (`ToggleOverlayCaptureProtection`) |
+| Ctrl+Alt+] / [ | Increase / decrease TP opacity (`ControllerWindow.AdjustOpacity`) |
+| Ctrl+Alt+V | Open / hide TP (`ControllerWindow.ToggleOverlayVisibility`) |
+| Ctrl+Alt+S | Hide / show TP in share (`ToggleOverlayCaptureProtection`) |
 | Ctrl+Alt+H | Hide / show Controller in share (`ToggleControllerCaptureProtection`) |
 | Ctrl+Alt+U | Release the App Stealth container, if embedded (`ReleaseStealthContainer`) |
 | Ctrl+Alt+. / , | Increase / decrease Auto-scroll speed (`ControllerWindow.AdjustScrollSpeed`) |
 | Ctrl+Alt+= / - | Increase / decrease font size (`ControllerWindow.AdjustFontSize`) |
+| Ctrl+Alt+Up / Down | Increase / decrease Voice scroll speed, Voice mode (`ControllerWindow.AdjustVoiceScrollSpeed`) |
+| Ctrl+Alt+Right / Left | Increase / decrease scroll step, Manual mode (`ControllerWindow.AdjustScrollStep`) |
+| Ctrl+Alt+' / ; | Increase / decrease Voice scroll sensitivity (`ControllerWindow.AdjustVoiceThreshold`) |
 
 Removed in an earlier pass: Ctrl+Alt+M (cycle Script↔Q&A) and the *original* binding of
 Ctrl+Alt+, (bring Controller to front) — both dropped per request, and
@@ -120,20 +135,39 @@ Controller" menu item and double-click. Ctrl+Alt+, was later reassigned to Decre
 Auto-scroll speed — freed keys get reused rather than left permanently retired.
 
 Hotkeys are registered on a dedicated background thread that owns its own message loop
-(`HotkeyService.HotkeyLoop`). IDs are contiguous (`ID_SCROLL_UP`..`ID_FONT_SIZE_DOWN`)
+(`HotkeyService.HotkeyLoop`). IDs are contiguous (`ID_SCROLL_UP`..`ID_VOICE_THRESHOLD_DOWN`)
 and the cleanup loop unregisters the whole range — keep new IDs inside it.
 
-The toggle-style hotkeys (Box visibility, Box/Controller capture protection) flip the
+The toggle-style hotkeys (TP visibility, TP/Controller capture protection) flip the
 corresponding footer `ToggleButton.IsChecked` rather than duplicating logic — this reuses
 the existing `Checked`/`Unchecked` handlers so the hotkey and a manual click can never fall
 out of sync. The Lock/Unlock footer button follows the same rule: its `PropertyChanged` sync
 (for Ctrl+Alt+Home) sets `LockToggle.IsChecked` instead of only updating its label —
 previously a hotkey-driven lock/unlock left `IsChecked` stale, so the *next manual click*
 silently re-affirmed the current state instead of flipping it. The opacity/scroll-speed/
-font-size "Adjust*" methods all follow one more shared pattern: compute the new value, set
-the ViewModel property (which persists to config and pushes the change to the Box), then
-sync the on-screen slider under the `_populatingUi` guard so it doesn't fire a second,
-redundant write.
+font-size/voice-scroll-speed/scroll-step "Adjust*" methods all follow one more shared pattern:
+compute the new value, set the ViewModel property (which persists to config and pushes the
+change to the TP), then sync the on-screen slider under the `_populatingUi` guard so it
+doesn't fire a second, redundant write. **`AdjustVoiceThreshold` is the one exception** —
+`VoiceRmsThreshold` (a `double`) isn't backed by a ViewModel property, so it writes straight
+to `App.Config.Current.Appearance.VoiceRmsThreshold`, updates the `VoiceThresholdValue` label
+text and calls `App.Config.Save()` itself, mirroring `VoiceThresholdSlider_ValueChanged`'s
+existing direct-write pattern rather than the ViewModel one.
+
+Six new hotkeys were added for Stream Deck dial mapping (Voice scroll speed, Manual scroll
+step, Voice scroll sensitivity) using Ctrl+Alt+Up/Down/Left/Right and Ctrl+Alt+'/; — chosen
+because directional keys map naturally to a physical dial twist. Trade-off accepted knowingly:
+on some machines, Ctrl+Alt+Arrow is also bound by legacy Intel/NVIDIA graphics driver control
+panels to rotate the display. `RegisterHotKey`'s return value isn't checked or logged, so if
+that binding claims the combo first, onAIr's arrow hotkeys simply won't register — no error,
+no crash, they just silently don't fire. Hasn't been observed in testing on this dev machine;
+worth knowing if a user reports Ctrl+Alt+Up/Down/Left/Right doing nothing. All 6 new hotkeys
+were verified end-to-end (real `SendKeys`-simulated key combos + UI Automation slider reads):
+Ctrl+Alt+Right/Left correctly moved and clamped `ScrollStepSlider` (20↔400 range, step 20),
+Ctrl+Alt+Up/Down correctly moved `VoiceScrollSpeedSlider` (1-100 range, step 5), and
+Ctrl+Alt+'/; correctly moved `VoiceThresholdSlider` and its label (1-50 range, step 2.0) —
+plus a regression check confirmed a pre-existing hotkey (Ctrl+Alt+]) still works after the
+ID range/cleanup-loop change.
 
 **Verifying a new hotkey actually works — a caveat about this dev machine:** synthetic
 keyboard input (`keybd_event`/`SendInput`) for automated end-to-end hotkey testing has
@@ -197,6 +231,12 @@ Auto's slider next to Manual's with no way to tell which was "live"):
 | Auto | Auto-scroll speed | `ScrollSpeed` | `OverlayViewModel._autoTimer`, continuous 50 ms tick |
 | Voice | Voice scroll speed | `VoiceScrollSpeed` | `OverlayViewModel._voiceTimer`, continuous 50 ms tick, gated on `IsVoiceActive` |
 
+Don't confuse the mechanism above (how far/fast the script moves while a mode is active) with
+*tuning the setting itself* — all three config fields, plus Voice's sensitivity threshold, now
+have their own dedicated global hotkeys too (`ScrollStep`: Ctrl+Alt+Right/Left, `ScrollSpeed`:
+Ctrl+Alt+./,, `VoiceScrollSpeed`: Ctrl+Alt+Up/Down, `VoiceRmsThreshold`: Ctrl+Alt+'/;) — see
+"Global hotkeys" above.
+
 **Voice mode used to be much weaker than Auto even at max settings.** It shared `ScrollSpeed`
 with Auto *and* only actually scrolled once every 3 microphone `DataAvailable` callbacks (a
 debounce baked into the old `OnVoiceRms`). Both problems are fixed by giving Voice its own
@@ -231,7 +271,7 @@ Every tab is organised into cards:
 
 | Tab | Cards |
 |-----|-------|
-| **Script** | SCRIPT FILE · SCROLL MODE · SCROLL STEP (PX)/AUTO-SCROLL SPEED/VOICE SCROLL SPEED (only the active mode's card is shown) · APPEARANCE (font size/Box opacity/color) · VIRTUAL SCROLL BUTTONS |
+| **Script** | SCRIPT FILE · SCROLL MODE · SCROLL STEP (PX)/AUTO-SCROLL SPEED/VOICE SCROLL SPEED (only the active mode's card is shown) · APPEARANCE (font size/TP opacity/color) · VIRTUAL SCROLL BUTTONS |
 | **Q&A** | RECORDING · AI PROVIDER (chat + transcription + configure/test) · PROMPTS (system prompt + presentation context) · WHISPER MODEL |
 | **Settings** | AUDIO SOURCE (recording source + input/output device + refresh) · VOICE SCROLL SENSITIVITY · THEME |
 | **App Stealth** | APP STEALTH — single card, the whole embed flow is one cohesive task |
@@ -298,6 +338,80 @@ Two independent asks landed together:
 
 ---
 
+## Live transcript preview + the local-Whisper-never-loaded bug
+
+While recording a Q&A question with a local Whisper model configured, the Box now shows a
+live, still-growing "Live preview: …" line a few seconds behind what's actually been said —
+implemented as `OverlayViewModel._livePreviewTimer` (2.5s tick) calling the new
+`AudioService.PeekRecordedAudio()` (a lock-guarded snapshot of the in-progress recording
+buffer, flushed but not stopped) through `WhisperService.TranscribeAsync` (reused as-is), with
+`LivePreviewText` bound to a new `TextBlock` in `OverlayWindow.xaml`. Only runs when
+`WhisperService.IsLocalModelLoaded` — re-transcribing on a timer against a cloud API would burn
+through rate limits/cost for no benefit. Cleared and stopped the moment recording stops
+(`ToggleRecordingAsync`), right before the real, full-buffer transcription replaces it.
+
+**Design iteration — trailing window → full growing buffer.** The first version windowed
+`PeekRecordedAudio` to a trailing slice (18s, then 8s) of audio, re-transcribing only that
+slice each tick, to keep per-tick cost roughly constant regardless of recording length. In
+practice this made the preview jump between disjoint fragments and erase whatever was shown a
+moment before, instead of reading like an accumulating transcript — not what "live preview"
+implies. Switched to re-transcribing the *entire* buffer captured so far on every tick
+(`PeekRecordedAudio()` now takes no window parameter, just returns the whole flushed buffer —
+already a complete valid WAV, so the windowing's `WaveFileReader`/`WaveFileWriter` re-encoding
+was removed entirely, not just disabled). Cost now grows with recording length instead of
+staying constant, but for this feature's actual use case — a few seconds to maybe half a
+minute of a spoken question — that's the right trade-off for a preview that behaves like
+users expect.
+
+**Model-speed ceiling, confirmed with real hardware data.** A live preview is only useful if a
+tick's transcription finishes faster than the recording itself — a late-arriving result is
+discarded once recording has stopped (`if (result.Success && IsRecording)` in
+`LivePreviewTick`), so a too-slow model means the preview simply never appears, and only the
+final post-stop transcription (unaffected either way) shows up. Confirmed on real (CPU-only,
+no GPU) dev hardware: `ggml-medium.bin` (1.5GB) took 5+ minutes to transcribe ~106s of audio in
+one test — hopelessly too slow for a live preview of a 5-20s question. Retested after
+switching to smaller models: **`tiny` and `base` worked well without needing quantized
+variants**; `small` is presumably borderline (untested); `medium`/`large` confirmed
+impractical for this feature specifically (the *final*, post-recording transcription is
+unaffected by any of this — it's not time-critical the same way). This is now documented for
+users in the README's "Whisper local model" section.
+
+**Refined cost/benefit, from further real-world testing:** the best combination turned out to
+be `ggml-tiny` **unquantized** plus `ggml-base` with **q5_1** quantization — quantizing `tiny`
+wasn't worth the accuracy trade-off (already small/fast enough), but `q5_1` on `base` gave a
+meaningfully smaller/faster model without a noticeable accuracy hit. Also added to the README.
+
+**The bug that made all of the above impossible to see at first: `WhisperModelPath` was never
+actually loaded.** `WhisperService.LoadModelAsync(path)` existed and worked correctly, but
+nothing in the entire codebase ever called it — `AiTabViewModel.WhisperModelPath` was faithfully
+read from and written to `config.json` on every change, but that's all that ever happened to
+it. `WhisperService.IsLocalModelLoaded` was therefore always `false` regardless of a
+configured path, so the app silently used the cloud API forever, even for users who'd set a
+local model path expecting in-process transcription. Fixed by giving `AiTabViewModel` a
+`WhisperService` dependency (threaded through `ControllerViewModel`'s constructor) and calling
+`LoadModelAsync` from `OnWhisperModelPathChanged`, debounced 600ms so typing a path
+character-by-character doesn't try to load a multi-hundred-MB file on every keystroke — and
+also called once on startup, since assigning `WhisperModelPath` from the loaded config in the
+constructor fires the same partial method. Added a `WhisperModelStatus` observable
+("Loading model…" / "✓ Model loaded" / "⚠ File not found" / "⚠ Failed to load model") surfaced
+in a new `TextBlock` under the Q&A tab's Whisper model path box, so this is visible instead of
+silently failing the same way again in the future.
+
+**A native crash this surfaced, unrelated to the two bugs above.** Once local models were
+actually loading, concurrent access to whisper.net's native `WhisperProcessor` — a live-preview
+tick's transcription racing the final post-recording transcription — crashed the whole process
+natively: no managed exception, nothing in `crash.log`, nothing in `launch.log`'s
+`UnhandledException` handler, just silent process death. `WhisperProcessor` isn't safe to
+invoke concurrently from two callers on the same instance. Fixed with a `SemaphoreSlim(1, 1)`
+gate around the entire body of `WhisperService.TranscribeAsync`, serializing every call —
+local or cloud — through it; there's no benefit to parallelising the cloud HTTP path either.
+`AudioService.PeekRecordedAudio` also picked up an `ObjectDisposedException` catch for the same
+underlying race (recording can stop and dispose `_writer`/`_buffer` between the `_recording`
+check and the buffer read, since a live-preview tick runs concurrently with the UI thread that
+owns recording start/stop).
+
+---
+
 ## Audio capture & the mic + system mix
 
 `AudioService.StartRecordingAsync(source)` handles three sources:
@@ -332,6 +446,171 @@ channels × 0.8 gain) — correct format, correct pacing, no clipping.
 
 ---
 
+## Remote control: Stream Deck plugin + MCP server
+
+Two independent client apps remote-control onAIr through the exact same local server —
+`OnAirNative/Services/RemoteControlService.cs`, a loopback-only (`127.0.0.1`, port 47823)
+`HttpListener`-based WebSocket server, gated by a single toggle in Settings → **REMOTE CONTROL**
+(`AppConfig.RemoteControlEnabled`). No pairing token — the trust boundary is "any process running
+as this Windows user", same as the global hotkeys themselves.
+
+### Protocol
+
+Newline-delimited JSON per WebSocket text frame:
+
+```
+client → onAIr:
+  {"op":"command","action":"ToggleOverlayVisibility"}     — fires a HotkeyAction (toggle/one-shot)
+  {"op":"adjust","action":"IncreaseOpacity"}               — same as "command", relative step
+  {"op":"getState"}                                        — triggers a broadcast to all clients
+  {"op":"set","id":"1","field":"FontSize","value":24}      — absolute setter (MCP-only need)
+  {"op":"loadScript","id":"1","path":"C:\\scripts\\a.txt"} — load by path, no file-picker UI
+  {"op":"getScriptText","id":"1"}
+  {"op":"listFonts","id":"1"}
+
+onAIr → client:
+  {"op":"state","data":{ ...RemoteState fields... }}       — broadcast to ALL clients (on connect,
+                                                              after every action, and a 2s safety
+                                                              timer for changes made via mouse click)
+  {"op":"result","id":"1","success":true|false,"error":"...","data":...}
+                                                              — reply to the ONE requesting client,
+                                                              only for set/loadScript/getScriptText/
+                                                              listFonts (command/adjust/getState
+                                                              stay fire-and-forget, unchanged
+                                                              from the original Stream Deck design)
+```
+
+`command`/`adjust`/`getState` reuse the existing `HotkeyAction` enum (`HotkeyService.cs`) — the
+same vocabulary shared with physical global hotkeys, dispatched through `App.ExecuteAction`. The
+`set`/`loadScript`/`getScriptText`/`listFonts` ops were added for the MCP server (v1.2.0) because
+`HotkeyAction` only has parameterless relative Increase/Decrease actions — useless for an LLM
+tool call like "set font size to 24". Each setter in `ControllerWindow.SetRemoteField(field,
+JsonElement value)` re-applies the SAME validation/clamp the real UI control uses (reads the
+live slider `Minimum`/`Maximum`, the hex-color regex, the installed-fonts list), so a value
+accepted remotely is guaranteed consistent with what the Settings/Appearance UI would allow.
+
+### Stream Deck plugin (`streamdeck-plugin/`)
+
+Node/TypeScript, official `@elgato/streamdeck` SDK v2, UUID `com.souz4rafael.onair`. 16 actions:
+5 toggles (Open/Hide TP, Lock/Unlock TP, Hide TP in Share, Hide Controller in Share, Start/Stop
+Recording), 1 clickable AI Status tile (provider + Whisper local/cloud + recording — press
+triggers `RecheckWhisperModel`), 4 momentary actions (Release Stealth, Open File, Scroll Up/Down),
+6 dial-capable actions (`Controllers: ["Keypad","Encoder"]` so they also work as plain buttons —
+Opacity, Font Size, Auto-Scroll Speed, Voice Scroll Speed, Manual Scroll Step, Voice Sensitivity).
+
+Build/package workflow:
+```powershell
+cd streamdeck-plugin
+npm install
+npm run build                       # rollup -> com.souz4rafael.onair.sdPlugin/bin/plugin.js
+streamdeck validate com.souz4rafael.onair.sdPlugin
+streamdeck pack com.souz4rafael.onair.sdPlugin -o dist -f
+# then copy dist\com.souz4rafael.onair.streamDeckPlugin -> ..\OnAirNative\Assets\onair-remote.streamDeckPlugin
+```
+The `.csproj`'s `<Content Include="Assets\onair-remote.streamDeckPlugin">` bundles that packaged
+file so Settings → REMOTE CONTROL → **Install Stream Deck Plugin** hands it to the Stream Deck
+app (`Process.Start` with `UseShellExecute=true` on the registered `.streamDeckPlugin` file
+association) without requiring Node.js on the end user's machine.
+
+Real bugs found/fixed building this (all confirmed on real Stream Deck+ hardware): a genuine
+naming mixup ("Hide TP" was wired to the wrong action), `ShowTitle` is a per-STATE manifest
+property (not per-action) so the in-app "hide title" toggle only ever affected whichever state
+was visible at edit time — fixed by defaulting `"ShowTitle": false` on every state plus a
+`setState()` memoization fix in `toggle-action-base.ts` (was calling `setState` unconditionally
+every 2s, which is itself what re-triggered the title). **Known remaining issue** (deferred,
+worked around manually by clearing the title field in the Stream Deck UI): the title still
+reappears on 3 specific dual-state toggles (Unlock TP/Show TP/Show Controller) despite the fix —
+root cause not yet found; possibly a Stream Deck profile-caching quirk independent of the
+manifest.
+
+### MCP server (`mcp-server/`)
+
+C# console app (`ModelContextProtocol` NuGet v2.2.0, official SDK, `net8.0`), stdio transport —
+lets any MCP-aware AI client (Claude Desktop, VS Code Copilot Chat, etc.) control onAIr via
+natural language. Standalone process, NOT embedded in `OnAirNative.exe` — connects to
+`RemoteControlService` purely as a WebSocket client (`OnAirClient.cs`, `ClientWebSocket`,
+request/response correlation via a client-generated `id` + `ConcurrentDictionary` of
+`TaskCompletionSource`s), exactly like the Stream Deck plugin does from the Node side.
+
+21 tools in `OnAirTools.cs` (`onair_get_state`, `onair_toggle_tp`, `onair_load_script`,
+`onair_set_font_color`, `onair_set_scroll_mode`, etc. — full list mirrored in
+`McpToolsDialog.xaml.cs`'s `Tools` array, which must stay in sync when a tool is
+added/removed/renamed). Every tool is individually toggleable by the user (Settings → REMOTE
+CONTROL → **MCP Tools & Setup…** dialog) — enforced by `ToolGate.cs`, which re-reads
+`AppConfig.McpDisabledTools` straight from `config.json` on every single tool call (not cached),
+so a toggle flipped in onAIr takes effect on the MCP server's very next call without restarting
+that long-lived stdio process. A disabled tool always returns a clear "disabled in Settings"
+message rather than silently no-oping.
+
+**Security**: never expose provider API keys or raw `config.json` beyond the already-public
+`RemoteState` fields — verified by grep during implementation; `RemoteControlService` itself
+never sends credentials over the wire.
+
+Build/package workflow — framework-dependent (not self-contained; fine since onAIr already
+requires the .NET 8 x64 runtime to run at all):
+```powershell
+cd mcp-server
+dotnet publish -c Release -o publish --self-contained false
+# then copy publish\* (minus OnAirMcp.pdb) -> ..\OnAirNative\Assets\mcp-server\
+```
+Bundled the same way as the Stream Deck plugin (`<Content Include="Assets\mcp-server\**">` in
+the `.csproj`) so **MCP Tools & Setup…**'s "Copy MCP Config" button can always point at a real,
+working absolute path (`<app dir>\Assets\mcp-server\OnAirMcp.dll`) regardless of dev build vs.
+installed copy. **Remember to republish + recopy after ANY mcp-server code change** — a stale
+bundled copy silently keeps old behavior (this bit once during development: `ToolGate` was
+added to the source but the bundled `.dll` was built before that, so gating appeared broken
+when testing the bundled copy specifically, even though the dev build was already correct).
+
+Tested via `npx @modelcontextprotocol/inspector --cli dotnet <path> -- --method tools/call
+--tool-name <name>` (no GUI needed) — every tool, both success and validation-error paths, plus
+graceful behavior when onAIr isn't running (clear error, no crash).
+
+---
+
+## AI provider settings redesign (v1.2.0)
+
+**Real bug fixed**: the old single `ProviderConfigDialog` (opened via a "Configure provider…"
+button in the Q&A tab) read/wrote whichever provider was selected in the **Chat provider**
+dropdown — with Chat=Groq but Transcription=OpenAI, there was no way to ever configure OpenAI's
+key without first switching the chat dropdown to OpenAI (an unwanted side effect just to edit a
+credential), since Chat and Transcription are two independent selections
+(`AiTabViewModel.SelectedChatProviderIndex`/`SelectedTranscriptionProviderIndex`).
+
+Fixed by decoupling configuration from selection entirely:
+- `ProviderConfigDialog` now takes an explicit `providerKey` constructor parameter instead of
+  reading `_config.Current.Provider` — the provider to edit is fixed at construction time.
+- Settings tab gained 6 separate provider cards (Azure/OpenAI/Groq/Anthropic/Gemini/Mistral),
+  each showing a "✓ Configured" / "Not configured" status + a **Configure** button that opens
+  the dialog for that specific provider, independent of either dropdown.
+- The dialog itself gained its own **Test connection** button, calling
+  `AiChatService.TestConnectionAsync(providerKey, snapshot)` — already provider-parameterized,
+  it just wasn't being called that way. The snapshot is built from the CURRENTLY TYPED field
+  values (`BuildConfigFromCurrentFields()`), not the saved config, so testing reflects what's on
+  screen right now rather than stale saved credentials; Cancel truly discards unsaved edits since
+  the snapshot is a throwaway `AppConfig`, never assigned into `_config.Current`.
+- The Q&A tab's "Configure provider…" button was removed entirely; it now just has the two
+  selection dropdowns + the existing **Test connection** button (tests whichever provider is
+  currently selected for chat — unchanged behavior).
+
+## Mic level test (Settings tab)
+
+A **🎙 Test Microphone** toggle button + live RMS level meter in the Audio Source card, reusing
+`AudioService.StartVoiceMonitor`/`StopVoiceMonitor` — the exact same plumbing behind the Script
+tab's Voice scroll mode indicator — rather than a second capture path. `AudioService` only
+supports one monitor at a time, so the test refuses to start (shows a warning instead) while
+Voice scroll mode's own monitor is already running, rather than silently stealing it. Auto-stops
+when navigating away from the Settings tab or closing the Controller window.
+
+## Color swatch → hex box (v1.2.0)
+
+Clicking a preset color swatch (White/Yellow/Green/Aqua/Orange/Pink) still applies it immediately
+(unchanged), but now also populates the editable `CustomColorBox` hex field with that value (was
+previously a separate read-only `FontColorIndicator` TextBlock, now removed) — lets you use a
+preset as a starting point and fine-tune the exact shade from there instead of only seeing a
+static readout.
+
+---
+
 ## Critical WinUI 3 2.1.x quirks
 
 1. `Window.Resources` does not exist → use `Grid.Resources` on root element
@@ -340,11 +619,28 @@ channels × 0.8 gain) — correct format, correct pacing, no clipping.
 4. `Slider Minimum/Maximum` in XAML → `XamlParseException` → set in code-behind
 5. `[LibraryImport]` needs `EntryPoint="GetWindowLongW"` for A/W variant Win32 functions
 6. `StringBuilder` not supported in `[LibraryImport]` → use `[DllImport]` for `GetWindowText`
-7. **WebView2 does not work in WS_EX_LAYERED windows** (the Box) → Browser mode was removed
+7. **WebView2 does not work in WS_EX_LAYERED windows** (the TP) → Browser mode was removed
 8. **Exceptions that escape a WndProc crash the CLR** with `ExecutionEngineException` → always try/catch in every WndProc
 9. **`_populatingUi` flag is CRITICAL** → slider `ValueChanged` overwrites config during UI init → guard all handlers with `if (_populatingUi) return;`
 10. **Unpackaged windows don't inherit the exe icon** → an `<ApplicationIcon>` in the csproj alone is not enough; each `Window` must call `AppWindow.SetIcon(path)` itself (see `WindowService.SetWindowIcon`) or the taskbar/title bar/Alt-Tab show a generic icon
 11. **A root `Grid`/`Page` with no explicit `Background` renders solid black** when nothing else covers it — harmless-looking in a permanently-dark app, but breaks a runtime Light/Dark theme switch (NavigationView's top pane and any gaps around content stay black while cards correctly re-theme). Always set an explicit `Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"` (or similar) on the window's root element. Also: don't set `RequestedTheme` on both the root **and** a child `NavigationView` — that split the NavView's own chrome from its Content onto two different themes; set it only on the root and let it cascade (see "Theme picker" section above)
+12. **`VisualStateManager.VisualStateGroups` MUST be nested INSIDE a `ControlTemplate`'s root element**, not placed as an XAML sibling after the root closes — a sibling placement compiles fine and throws no error, but silently no-ops: none of the VisualStates (`Checked`, `PointerOver`, etc.) ever actually apply. Found building the v1.2.0 pill tab bar's custom `RadioButton` template — the selected tab's accent-color background never rendered at all until the VSG was moved to be the template root `Border`'s first property-element child (matching exactly how every real WinUI default control template structures it)
+13. **Two `VisualStateGroup`s must never target the SAME property** — they're fully independent state machines; when one group transitions to a state with no matching Setter for that property, it silently reverts the property to its base XAML value with zero awareness of what another group's Setter currently wants there. Same pill tab bar: `CommonStates`'s `PointerOver`/`Normal` and `CheckStates`'s `Checked` both set `Border.Background` — moving the mouse away from an already-selected tab (`PointerOver` → `Normal`) wiped out the selection color, even though the tab was still logically checked. Fix: give each group a disjoint property (`Background` for selection, `BorderBrush` for hover)
+14. **`Control`'s base style applies a `MinWidth="120"`** even underneath a fully custom `Style`+`ControlTemplate` that never mentions `MinWidth` itself — silently forces any small custom control (e.g. an icon-only "pill" segment meant to be ~36px) up to 120px. Must explicitly set `MinWidth="0"` (and `MinHeight="0"`) in the custom `Style` to override it
+15. **A plain `Border`/`Grid`/`StackPanel` has NO UI Automation peer in WinUI** — querying it by `AutomationId` always returns "not found" regardless of its actual `Visibility`, even when it's genuinely on screen. Don't use that as an "is this visible" check when testing/automating; query a concrete CHILD control instead (a `TextBox`, `Button`, named `TextBlock`, etc.)
+
+---
+
+## Pill segmented tab bar (v1.2.0)
+
+Replaced `NavigationView`'s top pane with a custom segmented "pill" control across the 5 main
+tabs. Selected tab shows icon+text and grows to fit (`GridLength.Auto` column, driven purely by
+content — no manual column-width bookkeeping in code); the other 4 collapse to icon-only and
+shrink to match. `RepositionThemeTransition` on the pill `Grid` animates the resulting reflow.
+Building this surfaced 3 genuine, non-obvious WinUI 3 bugs — see items 12–15 in "Critical WinUI 3
+2.1.x quirks" above for the technical detail (VisualStateManager placement, disjoint
+VisualStateGroup properties, the inherited `MinWidth=120`, and the StackPanel-has-no-UIA-peer
+false alarm that cost debugging time before being recognized as not a bug).
 
 ---
 
@@ -373,41 +669,94 @@ Limited for: Chrome/Edge/modern Chromium (DirectComposition surfaces bypass the 
 - Taskbar/title bar/Alt-Tab icon (`WindowService.SetWindowIcon`, called from both windows'
   `OnFirstActivated`) + `<ApplicationIcon>` in the csproj — unpackaged WinUI 3 windows do not pick
   up the exe's icon on their own.
-- Box screen-share protection is toggleable at runtime: Controller footer's **Hide Box** button
+- TP screen-share protection is toggleable at runtime: Controller footer's **Hide TP** button
   (`ControllerViewModel.OverlayProtected` → `OverlayProtectionChanged` event →
-  `WindowService.SetContentProtection` on the Box's hwnd).
-- Box always reopens at the primary monitor's top-left corner (`0,0`) on app launch instead of
+  `WindowService.SetContentProtection` on the TP's hwnd).
+- TP always reopens at the primary monitor's top-left corner (`0,0`) on app launch instead of
   restoring the last saved X/Y (`OverlayWindow.OnFirstActivated` / `SaveGeometry`). A saved position
   from a disconnected monitor or a different multi-monitor arrangement could put it fully off-screen
-  with no visible way to find it. Size is still restored, and moving/hiding/showing the Box within a
+  with no visible way to find it. Size is still restored, and moving/hiding/showing the TP within a
   single running session still keeps its position (only re-launching the app resets it to `0,0`).
 - In-app update check + one-click install from the About tab (`UpdateService` +
   `AboutTabViewModel.CheckForUpdatesCommand` / `DownloadAndInstallCommand`) — see the dedicated
   section above.
 - Hotkey set reworked: dropped Cycle Mode (Ctrl+Alt+M) and the original Bring Controller
   Forward binding of Ctrl+Alt+,; added Increase/Decrease Opacity (Ctrl+Alt+]/[), Release
-  Stealth Container (Ctrl+Alt+U), toggles for Box Visibility (Ctrl+Alt+V), Box Capture
+  Stealth Container (Ctrl+Alt+U), toggles for TP Visibility (Ctrl+Alt+V), TP Capture
   Protection (Ctrl+Alt+S), and Controller Capture Protection (Ctrl+Alt+H).
 - Per-mode scroll controls (Manual/Auto/Voice each get their own, only one shown at a
   time), a decoupled + fixed Voice scroll speed, a live font-size bug fix, a full card UI
   redesign across every Controller tab, and 4 more hotkeys (Ctrl+Alt+./,/=/- for Auto-scroll
   speed and font size) — see the "Scroll modes" and "Card UI" sections above.
-- Footer toggles collapsed into a single row (3 Box controls left, Hide Controller right) with
+- Footer toggles collapsed into a single row (3 TP controls left, Hide Controller right) with
   static labels + tooltips, and a System/Light/Dark theme picker added to the Settings tab — see
   the "Theme picker" section above, including the root-Grid-background rendering bug it surfaced.
-- v1.1.0: full "Box"/"onAIr" terminology rebrand across UI and docs, config folder migrated to
-  `%LocalAppData%\onAIr\` (auto-migrates existing installs), all references to the original
-  onAIr Electron project removed from the docs — see "Footer reorg + Box/onAIr rebrand" above.
+- **v1.1.0 (released):** full "Box"/"onAIr" terminology rebrand across UI and docs, then a further
+  "Box" → "TP" (Teleprompter) rename (same user-facing-strings-only pattern, no internal
+  class/config-field renames — see "Terminology" above); config folder migrated to
+  `%LocalAppData%\onAIr\` (auto-migrates existing installs); live transcript preview while
+  recording a Q&A question (local Whisper only, growing-buffer redesign, plus a real fix for
+  `WhisperModelPath` never actually being loaded into `WhisperService` and a native-crash fix for
+  concurrent whisper.net calls — see "Live transcript preview" above); 6 new global hotkeys
+  (Ctrl+Alt+Up/Down/Right/Left/'/;) for settings that previously had none, added ahead of the
+  Stream Deck plugin so every dial-style setting has a keyboard fallback.
+- **v1.2.0 (this session, not yet released):** the entire "Remote control" feature set —
+  `RemoteControlService`, the Stream Deck plugin (16 actions, full icon redesign, several real
+  bugfixes), and the new MCP server (21 tools, per-tool enable/disable, "MCP Tools & Setup…"
+  dialog) — see "Remote control: Stream Deck plugin + MCP server" above. Plus: a custom pill
+  segmented tab bar replacing `NavigationView` (surfaced 3 genuine WinUI 3 bugs — see quirks list
+  above); the AI provider settings redesign (6 independent per-provider cards in Settings,
+  decoupled from the Chat/Transcription dropdowns — a real bug fix, not just a refactor); a live
+  mic level test in the Settings tab; and preset color swatches now populate the editable hex box
+  instead of a separate read-only label.
+- **Known, deferred issue:** the Stream Deck plugin's title-reappearing bug (see "Remote control"
+  above) is only partially fixed — 3 specific dual-state toggle keys (Unlock TP/Show TP/Show
+  Controller) still show their title once activated, worked around manually for now by the user
+  clearing the title field in the Stream Deck app itself. Root cause not yet found.
 
 **Deliberately not doing**
 - `.txt` shell association ("Open with onAIr") — dropped, not worth the registry surface.
 - Silent/unattended auto-update — see the "In-app update check" section above for why.
-- Renaming internal class/file/namespace/config-field names to match the "Box" terminology — see
+- Renaming internal class/file/namespace/config-field names to match the "TP" terminology — see
   the "Terminology" section near the top of this file.
 
 **Deferred**
 - Automated tests and CI. There is no test project and no GitHub Actions workflow; validation is
-  currently `dotnet build` plus manual smoke tests.
+  currently `dotnet build` plus manual smoke tests (and, for the MCP server, `npx
+  @modelcontextprotocol/inspector --cli`).
+- The Stream Deck title-reappearing bug above.
+
+---
+
+## Build output: two output folders (a real trap, fixed)
+
+The `.csproj` declares `<Platforms>x64</Platforms>` (the app is x64-only — self-contained win-x64
+deploy for WinUI 3), but for a while nothing forced MSBuild's resolved `$(Platform)` to actually
+be `x64` when a build didn't pass it explicitly. MSBuild's own default is `AnyCPU`, and since
+`AnyCPU != x64`, that produces a **second, completely separate output folder**:
+`bin\Debug\net8.0-windows10.0.19041.0\win-x64\` (no `x64` segment) sitting right next to the real
+one, `bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\` — both contain a runnable
+`OnAirNative.exe`, and neither errors or warns about the other's existence.
+
+**This bit us for real**: an early `dotnet build OnAirNative\OnAirNative.csproj` (no `-p:Platform`,
+matching what this very file's build instructions used to say) landed in the no-`x64` folder, and
+every subsequent `dotnet build OnAirNative.sln` (which *does* resolve `x64` correctly, since the
+.sln records per-project platform mappings) kept updating the *other* one. Result: testing via a
+shortcut/manually-launched exe in the stale folder showed old behavior (missing hotkeys, old
+terminology) long after the source had moved on — with a fully valid, launchable exe and no error
+of any kind to suggest why.
+
+**Fixed** by adding `<Platform Condition="'$(Platform)' == '' Or '$(Platform)' == 'AnyCPU'">x64</Platform>`
+to the `.csproj`, so *any* build front-end (bare `dotnet build` on the `.csproj`, `dotnet build` on
+the `.sln`, Visual Studio with "Any CPU" left selected in the platform dropdown, raw `MSBuild.exe`)
+now resolves to the same `bin\x64\Debug\...` output. The stale `bin\Debug`/`obj\Debug`/`bin\Release`/
+`obj\Release` (no-platform) folders were deleted; verified both `dotnet build OnAirNative.csproj`
+and `dotnet build OnAirNative.sln` now write to the identical path.
+
+**Rule of thumb going forward**: the only correct dev/test exe path is
+`OnAirNative\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\OnAirNative.exe`. If a build or a
+test run ever behaves like it's ignoring recent changes, check for a stray `bin\Debug` (no `x64`)
+folder before assuming the code change itself is broken.
 
 ---
 
@@ -469,8 +818,8 @@ Notable values:
 - `voiceScrollSpeed`: 50 (1-100, independent from `scrollSpeed`/Auto mode — how fast Voice
   mode scrolls once triggered)
 - `theme`: `"System"` by default — `"System"` | `"Light"` | `"Dark"`
-- `overlayProtected`: true by default (Box hidden from screen capture); toggle at runtime via the
-  Controller footer's **Hide Box** button
+- `overlayProtected`: true by default (TP hidden from screen capture); toggle at runtime via the
+  Controller footer's **Hide TP** button
 - `controllerProtected`: false
 - `audioRecordingSource`: `microphone` | `system` | `both`
 
@@ -482,10 +831,16 @@ on the next save.
 ## Release checklist
 
 1. Bump `AboutTabViewModel.Version` and `PRODUCT_VERSION` in `installer/onair-native.nsi`.
-2. `dotnet publish -c Release -r win-x64 --self-contained true -p:WindowsPackageType=None -o ..\dist\publish-current`
-3. `& "C:\Program Files (x86)\NSIS\makensis.exe" installer\onair-native.nsi`
+2. If `streamdeck-plugin/` or `mcp-server/` changed since the last release, rebuild + recopy their
+   bundled assets FIRST (a stale bundled copy silently keeps old behavior — bit once already):
+   - `streamdeck-plugin/`: `npm run build` → `streamdeck pack com.souz4rafael.onair.sdPlugin -o dist -f`
+     → copy `dist\com.souz4rafael.onair.streamDeckPlugin` → `OnAirNative\Assets\onair-remote.streamDeckPlugin`
+   - `mcp-server/`: `dotnet publish -c Release -o publish --self-contained false` → copy
+     `publish\*` (minus `.pdb`) → `OnAirNative\Assets\mcp-server\`
+3. `dotnet publish -c Release -r win-x64 --self-contained true -p:WindowsPackageType=None -o ..\dist\publish-current`
+4. `& "C:\Program Files (x86)\NSIS\makensis.exe" installer\onair-native.nsi`
    (needs `installer/redist/WindowsAppRuntimeInstall-x64.exe` — see `installer/README.md`)
-4. `gh release create vX.Y.Z` and attach the setup `.exe`.
+5. `gh release create vX.Y.Z` and attach the setup `.exe`.
 
 **Asset retention policy:** by default, older releases' installer `.exe` assets get stripped
 (keeping only the latest) to save space — but this is a judgment call per release, not an automatic

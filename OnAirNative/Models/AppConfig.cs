@@ -49,6 +49,7 @@ public class AppearanceConfig
     public int    Opacity           { get; set; } = 75;
     public int    FontSize          { get; set; } = 22;
     public string FontColor         { get; set; } = "#f0f0f0";
+    public string FontFamily        { get; set; } = "Segoe UI";
     public int    ScrollStep        { get; set; } = 120;
     public int    ScrollSpeed       { get; set; } = 50;
     public int    VoiceScrollSpeed  { get; set; } = 50;   // independent from ScrollSpeed (Auto mode)
@@ -112,4 +113,17 @@ public class AppConfig
     public bool OverlayProtected    { get; set; } = true;
     // Content protection: hide controller from screen share (default off)
     public bool ControllerProtected { get; set; } = false;
+
+    /// <summary>Whether the Remote Control WebSocket server (RemoteControlService, loopback-only,
+    /// port 47823) should be running — gates BOTH the Stream Deck plugin and the MCP server, since
+    /// they're two clients of the exact same local server. Default on — matches the behavior
+    /// before this became user-toggleable.</summary>
+    public bool RemoteControlEnabled { get; set; } = true;
+
+    /// <summary>MCP tool names (e.g. "onair_set_font_color") the user has explicitly disabled via
+    /// Settings → REMOTE CONTROL → "MCP Tools &amp; Setup…". Empty by default (every tool enabled)
+    /// so upgrading users see no behavior change. Read directly from config.json by the separate
+    /// onAIr MCP server process (mcp-server/OnAirMcp — a different .exe, not this app) before
+    /// executing each tool call; see mcp-server/OnAirTools.cs's ToolGate.</summary>
+    public List<string> McpDisabledTools { get; set; } = [];
 }
