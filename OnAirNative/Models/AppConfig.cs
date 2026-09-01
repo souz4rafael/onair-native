@@ -91,6 +91,12 @@ public class AppConfig
     // Whisper.net local model path (empty = use cloud API)
     public string WhisperModelPath { get; set; } = "";
 
+    // Explicit user choice of local vs. cloud Whisper for actual transcriptions — deliberately
+    // NOT auto-derived from "is a model currently loaded", so loading a model in Settings (or
+    // it auto-loading at startup) never silently switches real transcriptions to local without
+    // the user asking for that via the Q&A tab's "Use local Whisper model" checkbox.
+    public bool UseLocalWhisper { get; set; } = false;
+
     // AI prompt customisation
     public string SystemPrompt { get; set; } =
         "You are a helpful assistant supporting a sales or technical presentation. " +

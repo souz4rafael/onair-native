@@ -87,6 +87,12 @@ public partial class OverlayViewModel : ObservableObject
         StopVoiceScrollTimer();
         _audio.StopVoiceMonitor();
         IsVoiceActive = false;
+        MicLevel      = 0; // clear any stale reading — otherwise switching Voice mode off then
+                            // back on (possibly with a different recording source configured in
+                            // between) could leave the last real level frozen on screen if the
+                            // new source stays silent for a while (same staleness bug as the
+                            // Settings mic test, same root cause: nothing overwrites a stale
+                            // value if the new capture just doesn't deliver data yet)
 
         switch (value)
         {
@@ -147,8 +153,12 @@ public partial class OverlayViewModel : ObservableObject
         _voiceTimer.Tick += VoiceScrollTick;
         _voiceTimer.Start();
 
-        // Pass the configured device ID so the correct mic is used
-        _audio.StartVoiceMonitor(OnVoiceRms, _config.Current.AudioDeviceId);
+        // Pass the configured recording source + device IDs so Voice mode actually monitors
+        // whatever the user selected (mic / system loopback / both, and which specific
+        // input/output device) instead of always the physical microphone / default playback
+        // device regardless of those settings.
+        _audio.StartVoiceMonitor(_config.Current.AudioRecordingSource, OnVoiceRms,
+            _config.Current.AudioDeviceId, _config.Current.AudioOutputDeviceId);
     }
 
     private void StopVoiceScrollTimer()
@@ -343,7 +353,8 @@ public partial class OverlayViewModel : ObservableObject
             QaAnswer    = "";
             QaStatus    = "Recording… (Ctrl+Alt+R to stop)";
             IsRecording = true;
-            await _audio.StartRecordingAsync(_config.Current.AudioRecordingSource, _config.Current.AudioDeviceId);
+            await _audio.StartRecordingAsync(_config.Current.AudioRecordingSource,
+                _config.Current.AudioDeviceId, _config.Current.AudioOutputDeviceId);
             StartLivePreview();
         }
     }

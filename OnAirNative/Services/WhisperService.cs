@@ -10,10 +10,13 @@ public record TranscriptionResult(bool Success, string Text = "", string? Error 
 /// <summary>
 /// Transcribes audio to text using either:
 ///   1. Whisper.net (in-process ggml model) — fast, no network, model file required
-///   2. Cloud API (Azure / OpenAI / Groq Whisper) — fallback when no local model
+///   2. Cloud API (Azure / OpenAI / Groq Whisper)
 ///
-/// To use the local model, call <see cref="LoadModelAsync"/> with a path to a
-/// whisper.cpp-format .bin/.gguf model file (download from huggingface.co/ggerganov/whisper.cpp).
+/// Which one is used is an explicit choice (<see cref="AppConfig.UseLocalWhisper"/>, set via the
+/// Q&amp;A tab's "Use local Whisper model" checkbox) — NOT automatically inferred from whether a
+/// model happens to be loaded. Call <see cref="LoadModelAsync"/> with a path to a whisper.cpp-
+/// format .bin/.gguf model file (download from huggingface.co/ggerganov/whisper.cpp) to make the
+/// local model AVAILABLE; that alone doesn't make it the one actually used.
 /// </summary>
 public sealed class WhisperService : IDisposable
 {
@@ -89,9 +92,22 @@ public sealed class WhisperService : IDisposable
         await _gate.WaitAsync();
         try
         {
-            return IsLocalModelLoaded
-                ? await TranscribeLocalAsync(wavData)
-                : await TranscribeViaApiAsync(wavData, cfg);
+            // cfg.UseLocalWhisper is the explicit, persisted choice from the Q&A tab's "Use
+            // local Whisper model" checkbox — the deciding factor, full stop. Previously this
+            // checked IsLocalModelLoaded instead, meaning simply loading a model in Settings (or
+            // it auto-loading from a saved path at startup) silently switched real
+            // transcriptions to local even if the user never asked for that; and unloading it
+            // would just as silently switch back to cloud. Now loading/unloading only affects
+            // what's AVAILABLE — using it is a separate, explicit decision.
+            if (cfg.UseLocalWhisper)
+            {
+                return IsLocalModelLoaded
+                    ? await TranscribeLocalAsync(wavData)
+                    : new TranscriptionResult(false, Error:
+                        "Local Whisper model isn't loaded — load one in Settings → WHISPER MODEL, " +
+                        "or uncheck \"Use local Whisper model\" in the Q&A tab to use a cloud provider instead.");
+            }
+            return await TranscribeViaApiAsync(wavData, cfg);
         }
         finally
         {
@@ -173,11 +189,18 @@ public sealed class WhisperService : IDisposable
         }
     }
 
-    private static string ResolveProvider(AppConfig cfg)
-    {
-        string[] whisperCapable = ["azure", "openai", "groq"];
-        return whisperCapable.Contains(cfg.Provider) ? cfg.Provider : cfg.TranscriptionProvider;
-    }
+    /// <summary>Resolves which provider key actually handles cloud transcription — always
+    /// <see cref="AppConfig.TranscriptionProvider"/>, i.e. whatever the Transcription dropdown
+    /// shows, full stop.
+    ///
+    /// Previously this silently substituted the CHAT provider instead whenever it happened to
+    /// be Whisper-capable (azure/openai/groq), completely ignoring an explicit Transcription
+    /// selection — e.g. Chat=Groq + Transcription="Azure (Whisper)" actually called Groq for
+    /// transcription, contradicting what the UI showed. Real bug, caught via the Q&amp;A tab's
+    /// "Test connection" reporting "Whisper: same as Chat (Groq)" when the user had deliberately
+    /// picked Azure. Public so callers outside this class (e.g. "Test connection") test the
+    /// exact provider that transcription will actually use.</summary>
+    public static string ResolveProvider(AppConfig cfg) => cfg.TranscriptionProvider;
 
     private static void ApplyAuth(HttpRequestMessage req, string provider, AppConfig cfg)
     {

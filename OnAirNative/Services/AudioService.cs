@@ -72,7 +72,12 @@ public sealed class AudioService : IDisposable
     public bool IsRecording => _recording;
 
     /// <param name="source">"microphone" | "system" | "both" (mic + system audio mixed)</param>
-    public Task StartRecordingAsync(string source = "microphone", string? deviceId = null)
+    /// <param name="deviceId">Input (microphone) device ID — ignored for source="system".</param>
+    /// <param name="outputDeviceId">Which playback/render device "system" loopback listens to —
+    /// e.g. a virtual audio cable/mixer channel (Elgato Wave Link, VoiceMeeter, etc.) so only
+    /// THAT device's audio is captured instead of whatever the OS default playback device is.
+    /// Empty/null falls back to the OS default render device.</param>
+    public Task StartRecordingAsync(string source = "microphone", string? deviceId = null, string? outputDeviceId = null)
     {
         if (_recording) return Task.CompletedTask;
 
@@ -80,12 +85,12 @@ public sealed class AudioService : IDisposable
 
         if (source == "both")
         {
-            StartMixedRecording(deviceId);
+            StartMixedRecording(deviceId, outputDeviceId);
             return Task.CompletedTask;
         }
 
         _capture = source == "system"
-            ? new WasapiLoopbackCapture()
+            ? CreateLoopbackCapture(outputDeviceId)
             : CreateCapture(deviceId);
 
         _buffer = new MemoryStream();
@@ -116,10 +121,10 @@ public sealed class AudioService : IDisposable
     /// no buffers while nothing is playing, so we cannot pace off buffered bytes;
     /// <c>ReadFully</c> pads the silent leg with zeros instead of stalling the mix.
     /// </summary>
-    private void StartMixedRecording(string? deviceId)
+    private void StartMixedRecording(string? deviceId, string? outputDeviceId)
     {
         _capture         = CreateCapture(deviceId);
-        _loopbackCapture = new WasapiLoopbackCapture();
+        _loopbackCapture = CreateLoopbackCapture(outputDeviceId);
 
         var micBuffer  = CreateLegBuffer(_capture.WaveFormat);
         var loopBuffer = CreateLegBuffer(_loopbackCapture.WaveFormat);
@@ -305,23 +310,68 @@ public sealed class AudioService : IDisposable
         _buffer          = null;
     }
 
-    // ── Voice monitor (RMS-based, for voice-activated scroll) ─────────────────
+    // ── Voice monitor (RMS-based, for voice-activated scroll AND the Settings mic test) ──────
 
-    private WasapiCapture? _monitor;
+    private IWaveIn?       _monitor;
+    private IWaveIn?       _monitorLoopback; // second leg, only used by source = "both"
     private Action<float>? _rmsCallback;
+    private float          _monitorMicRms;
+    private float          _monitorLoopbackRms;
 
     /// <summary>
-    /// Starts continuous microphone monitoring. The <paramref name="rmsCallback"/>
-    /// is invoked on the audio thread with the RMS level (0–100) of each buffer.
-    /// The caller must dispatch UI updates to the UI thread.
+    /// Starts continuous audio-level monitoring from whichever source is configured
+    /// (<paramref name="source"/>: "microphone" | "system" | "both", same values as
+    /// <see cref="StartRecordingAsync"/>). The <paramref name="rmsCallback"/> is invoked on the
+    /// audio thread with the RMS level (0–100). The caller must dispatch UI updates to the UI
+    /// thread.
+    ///
+    /// Previously this ALWAYS opened a microphone capture regardless of the configured source —
+    /// selecting "System audio (loopback)" (or "Both") had no effect on the Settings mic test or
+    /// on Voice scroll mode's activation, both of which route through here; either would keep
+    /// reacting to the physical microphone even with a silent/no mic selected. For "both", each
+    /// leg's own RMS is tracked independently and the callback reports whichever is louder at
+    /// that instant — good enough for a level meter / activation threshold, unlike the recording
+    /// path's sample-accurate mixer (which exists to produce one coherent WAV for transcription,
+    /// not just "is there sound").
     /// </summary>
-    public void StartVoiceMonitor(Action<float> rmsCallback, string? deviceId = null)
+    /// <param name="outputDeviceId">Which playback/render device "system"/"both" loopback
+    /// listens to (see <see cref="StartRecordingAsync"/>'s param doc) — empty/null falls back
+    /// to the OS default render device.</param>
+    public void StartVoiceMonitor(string source, Action<float> rmsCallback, string? deviceId = null, string? outputDeviceId = null)
     {
         if (_recording) return;
         StopVoiceMonitor();
 
-        _rmsCallback = rmsCallback;
-        _monitor = CreateCapture(deviceId);
+        _rmsCallback        = rmsCallback;
+        _monitorMicRms      = 0f;
+        _monitorLoopbackRms = 0f;
+
+        if (source == "both")
+        {
+            _monitor         = CreateCapture(deviceId);
+            _monitorLoopback = CreateLoopbackCapture(outputDeviceId);
+
+            _monitor.DataAvailable += (_, e) =>
+            {
+                if (e.BytesRecorded == 0) return;
+                _monitorMicRms = CalculateRms(e.Buffer, e.BytesRecorded, _monitor?.WaveFormat);
+                _rmsCallback?.Invoke(Math.Max(_monitorMicRms, _monitorLoopbackRms));
+            };
+            _monitorLoopback.DataAvailable += (_, e) =>
+            {
+                if (e.BytesRecorded == 0) return;
+                _monitorLoopbackRms = CalculateRms(e.Buffer, e.BytesRecorded, _monitorLoopback?.WaveFormat);
+                _rmsCallback?.Invoke(Math.Max(_monitorMicRms, _monitorLoopbackRms));
+            };
+
+            _monitor.StartRecording();
+            _monitorLoopback.StartRecording();
+            return;
+        }
+
+        _monitor = source == "system"
+            ? CreateLoopbackCapture(outputDeviceId)
+            : CreateCapture(deviceId);
         _monitor.DataAvailable += OnMonitorDataAvailable;
         _monitor.StartRecording();
     }
@@ -337,6 +387,26 @@ public sealed class AudioService : IDisposable
         catch { return new WasapiCapture(); }
     }
 
+    /// <summary>
+    /// Creates a loopback capture that listens to a SPECIFIC render/playback device (e.g. a
+    /// virtual audio cable/mixer channel such as Elgato Wave Link or VoiceMeeter) instead of
+    /// whatever the OS default playback device happens to be. Previously every
+    /// <c>new WasapiLoopbackCapture()</c> call site used the parameterless constructor, which
+    /// ALWAYS captures the default render device — the "Output device" picker in Settings was
+    /// saved to config but never actually consulted anywhere, so selecting e.g. an Elgato
+    /// virtual channel there had zero effect on what "System audio (loopback)" actually heard.
+    /// </summary>
+    private static WasapiLoopbackCapture CreateLoopbackCapture(string? outputDeviceId)
+    {
+        if (string.IsNullOrEmpty(outputDeviceId)) return new WasapiLoopbackCapture();
+        try
+        {
+            var device = new MMDeviceEnumerator().GetDevice(outputDeviceId);
+            return new WasapiLoopbackCapture(device);
+        }
+        catch { return new WasapiLoopbackCapture(); }
+    }
+
     public void StopVoiceMonitor()
     {
         if (_monitor is null) return;
@@ -344,6 +414,14 @@ public sealed class AudioService : IDisposable
         _monitor.DataAvailable -= OnMonitorDataAvailable;
         _monitor.Dispose();
         _monitor = null;
+
+        if (_monitorLoopback is not null)
+        {
+            _monitorLoopback.StopRecording();
+            _monitorLoopback.Dispose();
+            _monitorLoopback = null;
+        }
+
         _rmsCallback = null;
     }
 

@@ -433,10 +433,25 @@
                                       HorizontalAlignment="Stretch"
                                       SelectionChanged="TranscriptionCombo_SelectionChanged"/>
 
+                            <!-- The real switch for actual transcriptions (AppConfig.
+                                 UseLocalWhisper) — overrides the Transcription provider above
+                                 whenever checked. Loading/unloading the model in Settings →
+                                 WHISPER MODEL only controls availability; this decides whether
+                                 it's actually used. -->
+                            <CheckBox x:Name="UseLocalWhisperCheckBox"
+                                      Content="Use local Whisper model"
+                                      Checked="UseLocalWhisperCheckBox_Toggled"
+                                      Unchecked="UseLocalWhisperCheckBox_Toggled"/>
+
                             <!-- Provider credentials/models are configured from Settings → AI
                                  PROVIDERS (one card per provider, independent of which one is
-                                 selected here for chat/transcription) — this just tests
-                                 whichever chat provider is currently selected above. -->
+                                 selected here for chat/transcription) — this tests BOTH the
+                                 selected Chat provider and, for Whisper, either the local model
+                                 (if "Use local Whisper model" above is checked — verifying/
+                                 loading Settings → WHISPER MODEL's configured file) or the
+                                 selected Transcription provider (fully independent selections —
+                                 skips the redundant second call only when they're literally the
+                                 same provider). -->
                             <Button Translation="0,0,20"
                                     Content="Test connection"
                                     HorizontalAlignment="Stretch"
@@ -470,45 +485,6 @@
                                      TextWrapping="Wrap"
                                      PlaceholderText="e.g. 'Presenting Azure AI Foundry to Contoso…'"
                                      TextChanged="PresentationContextBox_TextChanged"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Card: Whisper model -->
-                    <Border Style="{StaticResource CardBorderStyle}">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="WHISPER MODEL" Style="{StaticResource CardTitleStyle}"/>
-
-                            <TextBlock Text="Local model path (optional — blank = cloud API)"
-                                       Style="{ThemeResource CaptionTextBlockStyle}"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="WhisperModelBox"
-                                         Grid.Column="0"
-                                         PlaceholderText="C:\models\ggml-base.en.bin"
-                                         TextChanged="WhisperModelBox_TextChanged"/>
-                                <Button Translation="0,0,20" Grid.Column="1"
-                                        Content="Browse"
-                                        Margin="8,0,0,0"
-                                        Click="BrowseWhisperModel_Click"/>
-                            </Grid>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock x:Name="WhisperModelStatusText"
-                                           FontSize="12"
-                                           VerticalAlignment="Center"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           Text=""/>
-                                <Button Translation="0,0,20" Content="🔄 Load / Unload"
-                                        FontSize="12"
-                                        Padding="8,4"
-                                        Click="RecheckWhisperModel_Click"
-                                        ToolTipService.ToolTip="Loads the model at the path above, or unloads back to the cloud API if the path is blank"/>
-                            </StackPanel>
-                            <HyperlinkButton Content="Download local models (ggml .bin) from huggingface.co"
-                                             NavigateUri="https://huggingface.co/ggerganov/whisper.cpp"
-                                             Padding="0"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -656,6 +632,48 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Card: Whisper model — moved here from Q&A (this is where the model FILE
+                         is configured; Q&A's AI PROVIDER card just has a "Use local Whisper
+                         model" checkbox + Test connection to verify/load it). -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="WHISPER MODEL" Style="{StaticResource CardTitleStyle}"/>
+
+                            <TextBlock Text="Local model path (optional — blank = cloud API)"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="WhisperModelBox"
+                                         Grid.Column="0"
+                                         PlaceholderText="C:\models\ggml-base.en.bin"
+                                         TextChanged="WhisperModelBox_TextChanged"/>
+                                <Button Translation="0,0,20" Grid.Column="1"
+                                        Content="Browse"
+                                        Margin="8,0,0,0"
+                                        Click="BrowseWhisperModel_Click"/>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock x:Name="WhisperModelStatusText"
+                                           FontSize="12"
+                                           VerticalAlignment="Center"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Text=""/>
+                                <Button Translation="0,0,20" x:Name="WhisperLoadUnloadBtn"
+                                        Content="Load"
+                                        FontSize="12"
+                                        Padding="8,4"
+                                        Click="WhisperLoadUnloadBtn_Click"
+                                        ToolTipService.ToolTip="Load: loads the model at the path above into memory. Unload: releases it from memory (path is kept) and falls back to the cloud API."/>
+                            </StackPanel>
+                            <HyperlinkButton Content="Download local models (ggml .bin) from huggingface.co"
+                                             NavigateUri="https://huggingface.co/ggerganov/whisper.cpp"
+                                             Padding="0"/>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Card: Theme -->
                     <Border Style="{StaticResource CardBorderStyle}">
                         <StackPanel Spacing="10">
@@ -689,17 +707,19 @@
                                               OnContent="On" OffContent="Off"
                                               Toggled="RemoteControlToggle_Toggled"/>
                             </StackPanel>
-                            <Button Content="📥 Install Stream Deck Plugin"
-                                    Click="InstallStreamDeckPlugin_Click"
-                                    ToolTipService.ToolTip="Installs the onAIr Remote plugin into Stream Deck (requires the Stream Deck app)"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="📥 Install Stream Deck Plugin"
+                                        Click="InstallStreamDeckPlugin_Click"
+                                        ToolTipService.ToolTip="Installs the onAIr Remote plugin into Stream Deck (requires the Stream Deck app)"/>
+                                <Button Content="🔌 MCP Tools &amp; Setup…"
+                                        Click="McpToolsSetup_Click"
+                                        ToolTipService.ToolTip="Configure which MCP tools are enabled and get the config snippet for your AI client"/>
+                            </StackPanel>
                             <TextBlock x:Name="InstallPluginStatusText"
                                        FontSize="11"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextWrapping="Wrap"
                                        Text=""/>
-                            <Button Content="🔌 MCP Tools &amp; Setup…"
-                                    Click="McpToolsSetup_Click"
-                                    ToolTipService.ToolTip="Configure which MCP tools are enabled and get the config snippet for your AI client"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

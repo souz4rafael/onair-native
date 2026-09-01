@@ -13,7 +13,8 @@ public partial class AiTabViewModel : ObservableObject
 
     // Chat provider selection
     [ObservableProperty] private int _selectedChatProviderIndex;
-    // Transcription provider selection (only shown when main provider doesn't support Whisper)
+    // Transcription provider selection — always what cloud transcription actually uses (see
+    // WhisperService.ResolveProvider), fully independent of the Chat provider selection above.
     [ObservableProperty] private int _selectedTranscriptionProviderIndex;
 
     [ObservableProperty] private string _systemPrompt;
@@ -26,6 +27,13 @@ public partial class AiTabViewModel : ObservableObject
 
     [ObservableProperty] private string _connectionStatus = "";
     [ObservableProperty] private bool   _isTesting        = false;
+
+    // "Use local Whisper model" checkbox (Q&A tab) — the explicit, PERSISTED source of truth
+    // for whether real transcriptions use local Whisper or a cloud provider (see
+    // AppConfig.UseLocalWhisper / WhisperService.TranscribeAsync). Deliberately independent of
+    // whether a model happens to be loaded right now — loading/unloading (Settings → WHISPER
+    // MODEL) only controls availability, this controls actual use.
+    [ObservableProperty] private bool _useLocalWhisper;
 
     public static readonly string[] ChatProviders          = ["Azure OpenAI", "OpenAI", "Groq", "Anthropic", "Google Gemini", "Mistral"];
     public static readonly string[] ProviderKeys           = ["azure", "openai", "groq", "anthropic", "gemini", "mistral"];
@@ -51,6 +59,12 @@ public partial class AiTabViewModel : ObservableObject
         // silently fell back to the cloud API forever, even with a valid local model path
         // configured (LoadModelAsync existed but nothing called it).
         WhisperModelPath = cfg.WhisperModelPath;
+
+        // Read the persisted preference LAST — assigning it fires OnUseLocalWhisperChanged,
+        // which (if true) may also kick off a debounced load; putting this after
+        // WhisperModelPath's own debounced load means the two naturally coalesce via the shared
+        // CancellationTokenSource instead of racing two concurrent loads of the same file.
+        UseLocalWhisper = cfg.UseLocalWhisper;
     }
 
     partial void OnSelectedChatProviderIndexChanged(int value)
@@ -88,6 +102,21 @@ public partial class AiTabViewModel : ObservableObject
         _config.Current.WhisperModelPath = value;
         _config.Save();
         _ = LoadWhisperModelDebouncedAsync(value);
+    }
+
+    partial void OnUseLocalWhisperChanged(bool value)
+    {
+        _config.Current.UseLocalWhisper = value;
+        _config.Save();
+
+        // Checking the box with a path configured but not yet loaded shouldn't silently defer
+        // the failure to the next real recording attempt — kick off a load right away so any
+        // problem (missing file, bad format) surfaces immediately, same as "Test connection"
+        // already does. Debounced (not a direct LoadWhisperModelAsync call) so it naturally
+        // coalesces with any load already in flight from WhisperModelPath's own debounce,
+        // instead of racing two concurrent loads of the same file.
+        if (value && !_whisper.IsLocalModelLoaded && !string.IsNullOrWhiteSpace(WhisperModelPath))
+            _ = LoadWhisperModelDebouncedAsync(WhisperModelPath);
     }
 
     // Debounced so typing a path character-by-character (vs. picking one via Browse,
@@ -149,13 +178,92 @@ public partial class AiTabViewModel : ObservableObject
             WhisperModelStatus = "Using cloud API (no local model path set)";
     }
 
+    /// <summary>
+    /// Genuine toggle for the Settings → WHISPER MODEL card's Load/Unload button: unloads if a
+    /// model is currently loaded, loads (from WhisperModelPath) if not. Deliberately a SEPARATE
+    /// command from <see cref="RecheckWhisperModelAsync"/> — Recheck always re-attempts a load
+    /// regardless of current state and is relied on by the Stream Deck plugin's AI Status tile
+    /// and the MCP "onair_recheck_whisper_model" tool; repurposing it into a toggle would make
+    /// those external triggers unload a perfectly working model instead of just re-verifying it.
+    /// </summary>
+    [RelayCommand]
+    public async Task ToggleWhisperModelAsync()
+    {
+        if (_whisper.IsLocalModelLoaded)
+        {
+            _whisper.UnloadModel();
+            WhisperModelStatus = "Unloaded (path kept — click Load to reload it)";
+        }
+        else
+        {
+            await LoadWhisperModelAsync(WhisperModelPath);
+        }
+    }
+
     [RelayCommand]
     public async Task TestConnectionAsync()
     {
         IsTesting        = true;
         ConnectionStatus = "Testing…";
-        var result = await _ai.TestConnectionAsync(_config.Current.Provider, _config.Current);
-        ConnectionStatus = result.Success ? $"✓ {result.Text}" : $"✗ {result.Error}";
-        IsTesting        = false;
+
+        var cfg          = _config.Current;
+        var chatProvider = cfg.Provider;
+        var chatResult   = await _ai.TestConnectionAsync(chatProvider, cfg);
+        var chatLine     = $"Chat ({DisplayName(chatProvider)}): " +
+                            (chatResult.Success ? $"✓ {chatResult.Text}" : $"✗ {chatResult.Error}");
+
+        // Whisper transcription always uses whatever the Transcription dropdown is set to (see
+        // WhisperService.ResolveProvider — fully independent of the Chat provider, even when
+        // Chat happens to be a Whisper-capable provider too) — UNLESS "Use local Whisper model"
+        // is checked, which is now the actual real-transcription switch too (AppConfig.
+        // UseLocalWhisper / WhisperService.TranscribeAsync), not just a test-time override. Only
+        // skip the redundant second cloud call when both dropdowns genuinely point at the same
+        // provider. Previously this method only ever tested the Chat provider, so a broken
+        // Whisper-only credential never surfaced here.
+        string whisperLine;
+        if (UseLocalWhisper)
+        {
+            if (string.IsNullOrWhiteSpace(WhisperModelPath))
+            {
+                whisperLine = "Whisper (local): ✗ No model file selected — pick one in Settings → WHISPER MODEL";
+            }
+            else if (_whisper.IsLocalModelLoaded)
+            {
+                whisperLine = "Whisper (local): ✓ Already loaded";
+            }
+            else
+            {
+                var ok = await _whisper.LoadModelAsync(WhisperModelPath);
+                WhisperModelStatus = ok ? "✓ Model loaded" : "⚠ Failed to load model";
+                whisperLine = ok
+                    ? "Whisper (local): ✓ Loaded successfully"
+                    : "Whisper (local): ✗ Failed to load — check the file in Settings → WHISPER MODEL";
+            }
+        }
+        else
+        {
+            // Not using local Whisper (per the checkbox) — test the cloud Transcription
+            // provider, regardless of whether a local model happens to be loaded in memory.
+            // A loaded-but-unused model must NOT make this test (or real transcriptions) skip
+            // verifying the cloud path — that was the exact bug: loading a model elsewhere
+            // silently making it "the one used" with no regard for this checkbox.
+            var whisperProvider = WhisperService.ResolveProvider(cfg);
+            if (whisperProvider == chatProvider)
+            {
+                whisperLine = $"Whisper: same as Chat ({DisplayName(whisperProvider)}) — covered above";
+            }
+            else
+            {
+                var whisperResult = await _ai.TestConnectionAsync(whisperProvider, cfg);
+                whisperLine = $"Whisper ({DisplayName(whisperProvider)}): " +
+                              (whisperResult.Success ? $"✓ {whisperResult.Text}" : $"✗ {whisperResult.Error}");
+            }
+        }
+
+        ConnectionStatus = $"{chatLine}\n{whisperLine}";
+        IsTesting         = false;
     }
+
+    private static string DisplayName(string providerKey) =>
+        ChatProviders[Array.IndexOf(ProviderKeys, providerKey)];
 }

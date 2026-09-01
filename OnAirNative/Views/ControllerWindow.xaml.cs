@@ -141,11 +141,17 @@ public sealed partial class ControllerWindow : Window
             UpdateRemoteControlStatusText();
         };
 
-        // Local Whisper model load status (Loading…/Model loaded/File not found/Failed) → UI
+        // Local Whisper model load status (Loading…/Model loaded/File not found/Failed) → UI,
+        // plus the Load/Unload button's label — both change together (WhisperModelStatus only
+        // ever changes inside LoadWhisperModelAsync/ToggleWhisperModelAsync, exactly the same
+        // moments IsLocalModelLoaded can flip), so one hook keeps both in sync.
         ViewModel.AiTab.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(ViewModels.AiTabViewModel.WhisperModelStatus))
+            {
                 WhisperModelStatusText.Text = ViewModel.AiTab.WhisperModelStatus;
+                WhisperLoadUnloadBtn.Content = App.Whisper.IsLocalModelLoaded ? "Unload" : "Load";
+            }
         };
 
         // Update check/install status → About tab UI
@@ -191,11 +197,13 @@ public sealed partial class ControllerWindow : Window
             TranscriptionCombo.ItemsSource      = AiTabViewModel.TranscriptionProviders;
             ChatProviderCombo.SelectedIndex     = ViewModel.AiTab.SelectedChatProviderIndex;
             TranscriptionCombo.SelectedIndex    = ViewModel.AiTab.SelectedTranscriptionProviderIndex;
+            UseLocalWhisperCheckBox.IsChecked   = ViewModel.AiTab.UseLocalWhisper;
 
             SystemPromptBox.Text        = ViewModel.AiTab.SystemPrompt;
             PresentationContextBox.Text = ViewModel.AiTab.PresentationContext;
             WhisperModelBox.Text        = ViewModel.AiTab.WhisperModelPath;
             WhisperModelStatusText.Text = ViewModel.AiTab.WhisperModelStatus;
+            WhisperLoadUnloadBtn.Content = App.Whisper.IsLocalModelLoaded ? "Unload" : "Load";
 
             // Scroll tab — set ranges THEN values.
             // Must be inside _populatingUi guard: setting Minimum causes WinUI 3 to clamp
@@ -822,6 +830,12 @@ public sealed partial class ControllerWindow : Window
         ViewModel.AiTab.SelectedTranscriptionProviderIndex = TranscriptionCombo.SelectedIndex;
     }
 
+    private void UseLocalWhisperCheckBox_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_populatingUi) return;
+        ViewModel.AiTab.UseLocalWhisper = UseLocalWhisperCheckBox.IsChecked == true;
+    }
+
     private async void TestConnection_Click(object sender, RoutedEventArgs e)
     {
         await ViewModel.AiTab.TestConnectionCommand.ExecuteAsync(null);
@@ -853,6 +867,12 @@ public sealed partial class ControllerWindow : Window
 
     private void RecheckWhisperModel_Click(object sender, RoutedEventArgs e) =>
         ViewModel.AiTab.RecheckWhisperModelCommand.Execute(null);
+
+    /// <summary>Settings → WHISPER MODEL card's Load/Unload button — a genuine toggle (see
+    /// AiTabViewModel.ToggleWhisperModelAsync's doc comment for why this is a separate command
+    /// from Recheck, which the Stream Deck plugin and MCP tool rely on unchanged).</summary>
+    private void WhisperLoadUnloadBtn_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.AiTab.ToggleWhisperModelCommand.Execute(null);
 
     /// <summary>Forces a Whisper local/cloud recheck — used by the Stream Deck plugin's
     /// AI Status tile press (via the RecheckWhisperModel remote action).</summary>
@@ -1118,6 +1138,8 @@ public sealed partial class ControllerWindow : Window
         var tag = (AudioSourceCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "microphone";
         App.Config.Current.AudioRecordingSource = tag;
         App.Config.Save();
+        StopMicTest(); // changing source mid-test would otherwise leave a stale capture open
+                        // against whatever device/source was selected when Test was clicked
     }
 
     private void InputDeviceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1127,6 +1149,7 @@ public sealed partial class ControllerWindow : Window
         {
             App.Config.Current.AudioDeviceId = dev.Id;
             App.Config.Save();
+            StopMicTest();
         }
     }
 
@@ -1137,6 +1160,7 @@ public sealed partial class ControllerWindow : Window
         {
             App.Config.Current.AudioOutputDeviceId = dev.Id;
             App.Config.Save();
+            StopMicTest();
         }
     }
 
@@ -1181,7 +1205,13 @@ public sealed partial class ControllerWindow : Window
 
         _micTestActive = true;
         MicTestPanel.Visibility = Visibility.Visible;
-        App.Audio.StartVoiceMonitor(OnMicTestRms, App.Config.Current.AudioDeviceId);
+        ResetMicTestLevel(); // clear any stale reading left over from a previous test run —
+                              // otherwise the old number (e.g. from Microphone) stays frozen on
+                              // screen if the newly selected source is currently silent (WASAPI
+                              // loopback in particular delivers NO buffers at all while nothing
+                              // is playing, so there'd be nothing to overwrite it with)
+        App.Audio.StartVoiceMonitor(App.Config.Current.AudioRecordingSource, OnMicTestRms,
+            App.Config.Current.AudioDeviceId, App.Config.Current.AudioOutputDeviceId);
     }
 
     private void OnMicTestRms(float rms) => DispatcherQueue.TryEnqueue(() =>
@@ -1189,6 +1219,12 @@ public sealed partial class ControllerWindow : Window
         MicTestLevelBar.Value  = rms;
         MicTestLevelText.Text  = $"{rms:F1}";
     });
+
+    private void ResetMicTestLevel()
+    {
+        MicTestLevelBar.Value = 0;
+        MicTestLevelText.Text = "0.0";
+    }
 
     private void StopMicTest()
     {
@@ -1198,6 +1234,7 @@ public sealed partial class ControllerWindow : Window
         MicTestToggle.IsChecked  = false;
         MicTestPanel.Visibility  = Visibility.Collapsed;
         MicTestStatusText.Text   = "";
+        ResetMicTestLevel(); // don't leave a stale reading behind for the next time the panel opens
     }
 
     // ── Window stealth ────────────────────────────────────────────────────────
