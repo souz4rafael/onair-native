@@ -23,6 +23,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- ═══ Header bar: mode indicator + lock badge ═════════════════════ -->
@@ -149,5 +150,36 @@
             </ScrollViewer>
 
         </Grid>
+
+        <!-- ═══ Footer: Copilot insight banner (Block 6) ═══════════════════════ -->
+        <!-- A sibling of the Row 1 content Grid above (which itself hosts the two mutually-
+             exclusive Script/Q&A panels) — this footer therefore stays visible regardless of
+             which mode is currently showing. An external agent connected via MCP/WebSocket can
+             push a short note here (see App.ShowInsightRemote / onair_show_insight) without ever
+             touching the AI's own Q&A answer or the script text, so the presenter can always
+             tell "what I should tell the client" apart from "a private heads-up from my
+             copilot". Collapsed whenever there's no active insight — costs zero visual space
+             by default, matching this app's established "TP stays uncluttered unless there's
+             something worth showing" principle (see PacingSummary/glossary/knowledge-base,
+             none of which ever render on the TP either). -->
+        <Border Grid.Row="2"
+                x:Name="InsightFooter"
+                Background="{StaticResource OverlayHeaderBgBrush}"
+                Padding="10,6"
+                CornerRadius="0,0,8,8"
+                Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="💡" FontSize="14" VerticalAlignment="Top"/>
+                <!-- Named "...Block" (not "InsightText") to avoid reading like
+                     ViewModel.InsightText in the code-behind — same convention already used for
+                     LivePreviewTextBlock above. -->
+                <TextBlock x:Name="InsightTextBlock"
+                           Foreground="#C8C8E8"
+                           FontSize="12"
+                           FontStyle="Italic"
+                           TextWrapping="Wrap"
+                           Text=""/>
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

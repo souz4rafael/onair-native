@@ -200,6 +200,13 @@ public sealed partial class ControllerWindow : Window
                 UpdateQaSessionStatusText();
             else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.PacingSummary))
                 PacingSummaryText.Text = Overlay.ViewModel.PacingSummary;
+            // Block 6: push an immediate state broadcast (rather than waiting up to 2s for the
+            // safety-net timer) the instant either changes — a monitoring MCP agent polling
+            // QaTurnCount, or a live WS observer waiting on the insight footer, should see the
+            // new value with as little latency as the WS protocol allows.
+            else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.QaTurnCount) ||
+                     e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.InsightText))
+                App.RemoteControl?.NotifyStateMayHaveChanged();
         };
 
         PopulateStaticUi();
@@ -519,15 +526,14 @@ public sealed partial class ControllerWindow : Window
         }
     }
 
-    private async void AddKnowledgeBaseFile_Click(object sender, RoutedEventArgs e)
+    private void AddKnowledgeBaseFile_Click(object sender, RoutedEventArgs e)
     {
-        var picker = new Windows.Storage.Pickers.FileOpenPicker();
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, _hwnd);
-        picker.FileTypeFilter.Add(".txt");
-        picker.FileTypeFilter.Add(".md");
-        var files = await picker.PickMultipleFilesAsync();
-        foreach (var file in files)
-            ViewModel.AiTab.AddKnowledgeBaseFileCommand.Execute(file.Path);
+        // Win32FileDialog instead of Windows.Storage.Pickers.FileOpenPicker — see its own doc
+        // comment (the WinRT picker hangs forever, no dialog ever appearing, in this unpackaged
+        // app under some session types).
+        var paths = Win32.Win32FileDialog.PickMultipleFiles(_hwnd, "Reference documents", "txt", "md");
+        foreach (var path in paths)
+            ViewModel.AiTab.AddKnowledgeBaseFileCommand.Execute(path);
     }
 
     private void ScrollUp_Click(object sender, RoutedEventArgs e) =>
@@ -811,6 +817,13 @@ public sealed partial class ControllerWindow : Window
         ScrollMode              = (Overlay?.ViewModel.ScrollMode ?? ViewModels.ScrollMode.Manual).ToString(),
         FontFamily              = ViewModel.ScrollTab.FontFamily,
         LoadedScriptName        = ViewModel.ScrollTab.LoadedFileName,
+        LastQuestion            = Overlay?.ViewModel.QaQuestion ?? "",
+        LastAnswer              = Overlay?.ViewModel.QaAnswer ?? "",
+        QaTurnCount             = Overlay?.ViewModel.QaTurnCount ?? 0,
+        PacingSummary           = Overlay?.ViewModel.PacingSummary ?? "",
+        FollowUpSuggestions     = Overlay?.ViewModel.FollowUpSuggestions.ToList() ?? [],
+        QaSessionActive         = Overlay?.ViewModel.IsQaSessionActive ?? false,
+        InsightText             = Overlay?.ViewModel.InsightText ?? "",
     };
 
     /// <summary>Applies an absolute setter value by field name — the MCP server's write path.
@@ -1029,17 +1042,16 @@ public sealed partial class ControllerWindow : Window
     private void WhisperModelBox_TextChanged(object sender, TextChangedEventArgs e) =>
         ViewModel.AiTab.WhisperModelPath = WhisperModelBox.Text;
 
-    private async void BrowseWhisperModel_Click(object sender, RoutedEventArgs e)
+    private void BrowseWhisperModel_Click(object sender, RoutedEventArgs e)
     {
-        var picker = new Windows.Storage.Pickers.FileOpenPicker();
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, _hwnd);
-        picker.FileTypeFilter.Add(".bin");
-        picker.FileTypeFilter.Add(".gguf");
-        var file = await picker.PickSingleFileAsync();
-        if (file is not null)
+        // Win32FileDialog instead of Windows.Storage.Pickers.FileOpenPicker — see its own doc
+        // comment (the WinRT picker hangs forever, no dialog ever appearing, in this unpackaged
+        // app under some session types).
+        var path = Win32.Win32FileDialog.PickSingleFile(_hwnd, "Whisper model files", "bin", "gguf");
+        if (path is not null)
         {
-            WhisperModelBox.Text = file.Path;
-            ViewModel.AiTab.WhisperModelPath = file.Path;
+            WhisperModelBox.Text = path;
+            ViewModel.AiTab.WhisperModelPath = path;
         }
     }
 

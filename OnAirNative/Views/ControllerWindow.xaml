@@ -237,7 +237,7 @@
                                            Text="No file loaded"
                                            TextTrimming="CharacterEllipsis"/>
                                 <Button Translation="0,0,20" Grid.Column="1"
-                                        Content="Load .txt…"
+                                        Content="Load Script…"
                                         Click="LoadFile_Click"
                                         Margin="8,0,0,0"/>
                             </Grid>
@@ -523,6 +523,33 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Card: Knowledge base (Block 3) — lightweight keyword-relevance search
+                         over small reference documents (.txt/.md). NOT an embeddings/vector-DB
+                         pipeline (see KnowledgeBaseService's doc comment) — relevant excerpts are
+                         found and injected automatically per-question, nothing to search
+                         manually. Lives in the Q&A tab (not Settings) alongside the Glossary
+                         above — both are Q&A-answer-quality knobs the presenter tunes per
+                         session/client, not app-wide settings. -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="KNOWLEDGE BASE" Style="{StaticResource CardTitleStyle}"/>
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="Attach small reference documents (.txt/.md — product specs, FAQs, pricing). The most relevant excerpts are automatically included when answering a question — no manual search needed."/>
+
+                            <StackPanel x:Name="KnowledgeBaseFilesPanel" Spacing="6"/>
+                            <TextBlock x:Name="KnowledgeBaseEmptyText"
+                                       FontSize="12"
+                                       Opacity="0.6"
+                                       Text="No reference documents attached yet."/>
+
+                            <Button Content="+ Add file(s)…"
+                                    HorizontalAlignment="Stretch"
+                                    Click="AddKnowledgeBaseFile_Click"/>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Card: Usage + conversation memory -->
                     <Border Style="{StaticResource CardBorderStyle}">
                         <StackPanel Spacing="10">
@@ -802,32 +829,6 @@
                             <HyperlinkButton Content="Download local models (ggml .bin) from huggingface.co"
                                              NavigateUri="https://huggingface.co/ggerganov/whisper.cpp"
                                              Padding="0"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Card: Knowledge base (Block 3) — lightweight keyword-relevance search
-                         over small reference documents (.txt/.md). NOT an embeddings/vector-DB
-                         pipeline (see KnowledgeBaseService's doc comment) — relevant excerpts are
-                         found and injected automatically per-question, nothing to search
-                         manually. Glossary lives in the Q&A tab's PROMPTS card instead (it's a
-                         short prompt-like field, not a file list). -->
-                    <Border Style="{StaticResource CardBorderStyle}">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="KNOWLEDGE BASE" Style="{StaticResource CardTitleStyle}"/>
-                            <TextBlock FontSize="12"
-                                       Opacity="0.7"
-                                       TextWrapping="Wrap"
-                                       Text="Attach small reference documents (.txt/.md — product specs, FAQs, pricing). The most relevant excerpts are automatically included when answering a question — no manual search needed."/>
-
-                            <StackPanel x:Name="KnowledgeBaseFilesPanel" Spacing="6"/>
-                            <TextBlock x:Name="KnowledgeBaseEmptyText"
-                                       FontSize="12"
-                                       Opacity="0.6"
-                                       Text="No reference documents attached yet."/>
-
-                            <Button Content="+ Add file(s)…"
-                                    HorizontalAlignment="Stretch"
-                                    Click="AddKnowledgeBaseFile_Click"/>
                         </StackPanel>
                     </Border>
 

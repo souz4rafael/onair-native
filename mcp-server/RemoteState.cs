@@ -22,4 +22,11 @@ public sealed record RemoteState(
     double VoiceThreshold,
     string ScrollMode,
     string FontFamily,
-    string LoadedScriptName);
+    string LoadedScriptName,
+    string LastQuestion,
+    string LastAnswer,
+    int QaTurnCount,
+    string PacingSummary,
+    List<string> FollowUpSuggestions,
+    bool QaSessionActive,
+    string InsightText);

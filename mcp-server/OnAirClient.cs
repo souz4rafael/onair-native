@@ -243,6 +243,22 @@ public sealed class OnAirClient : IAsyncDisposable
             : [];
     }
 
+    /// <summary>Pushes a Copilot-insight message into the TP's footer (Block 6) — see
+    /// RemoteControlService's "showInsight" op / OverlayViewModel.SetInsight for the full design
+    /// (visible in both Script and Q&amp;A modes, never mixed into the AI's own Q&amp;A answer).</summary>
+    public async Task<(bool Success, string? Error)> ShowInsightAsync(string text, CancellationToken ct = default)
+    {
+        var result = await SendRequestAsync(new JsonObject { ["op"] = "showInsight", ["text"] = text }, ct);
+        return ParseResult(result);
+    }
+
+    /// <summary>Clears the TP's Copilot-insight footer, if any is currently shown.</summary>
+    public async Task<(bool Success, string? Error)> ClearInsightAsync(CancellationToken ct = default)
+    {
+        var result = await SendRequestAsync(new JsonObject { ["op"] = "clearInsight" }, ct);
+        return ParseResult(result);
+    }
+
     public async ValueTask DisposeAsync()
     {
         _receiveCts?.Cancel();

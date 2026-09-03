@@ -262,6 +262,30 @@ public partial class App : Application
     /// so the MCP server's "list fonts" tool and the Settings UI can never disagree.</summary>
     public List<string> ListFontsRemote() => Views.ControllerWindow.GetInstalledFontFamilies();
 
+    /// <summary>Pushes a Copilot-insight message into the TP's footer (Block 6) — the write
+    /// path for an EXTERNAL agent monitoring onAIr's Q&amp;A over MCP (see
+    /// OverlayViewModel.SetInsight for the length cap / blank-clears behavior). Deliberately
+    /// requires non-blank text — a caller that wants to remove the insight should call
+    /// <see cref="ClearInsightRemote"/> instead, an explicit, unambiguous action rather than
+    /// relying on an implicit "empty string means clear" convention.</summary>
+    public (bool Success, string? Error) ShowInsightRemote(string text)
+    {
+        if (_overlay is null) return (false, "Overlay not ready");
+        if (string.IsNullOrWhiteSpace(text)) return (false, "Insight text is required — call clear_insight to remove it instead");
+        _overlay.ViewModel.SetInsight(text);
+        RemoteControl?.NotifyStateMayHaveChanged();
+        return (true, null);
+    }
+
+    /// <summary>Clears the TP's Copilot-insight footer, if any is currently shown.</summary>
+    public (bool Success, string? Error) ClearInsightRemote()
+    {
+        if (_overlay is null) return (false, "Overlay not ready");
+        _overlay.ViewModel.ClearInsight();
+        RemoteControl?.NotifyStateMayHaveChanged();
+        return (true, null);
+    }
+
     /// <summary>Starts the Stream Deck remote control WebSocket server if it isn't already
     /// running. Best-effort: a bind failure (e.g. the port is already in use) is logged, never
     /// thrown — called both at launch (when enabled in settings) and from the Settings tab's
@@ -274,7 +298,8 @@ public partial class App : Application
         {
             RemoteControl = new RemoteControlService(
                 ExecuteAction, GetRemoteState, _uiQueue,
-                SetRemoteField, LoadScriptRemoteAsync, GetScriptTextRemote, ListFontsRemote);
+                SetRemoteField, LoadScriptRemoteAsync, GetScriptTextRemote, ListFontsRemote,
+                ShowInsightRemote, ClearInsightRemote);
             RemoteControl.Start();
             File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} RemoteControlService started on port {RemoteControlService.Port}\n");
         }

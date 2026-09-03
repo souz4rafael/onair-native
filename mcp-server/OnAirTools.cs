@@ -44,11 +44,26 @@ public static class OnAirTools
         return "onAIr is running and reachable.";
     });
 
-    [McpServerTool(Name = "onair_get_state"), Description("Gets the full current state of onAIr: whether the teleprompter (TP) is open, locked, or hidden from screen share; whether the Controller window is hidden from screen share; recording status; the active AI chat provider; Whisper transcription model status (local vs cloud); font size, color, and family; teleprompter opacity; scroll mode (Manual/Auto/Voice) and its speed/step settings; and the loaded script's filename. Use this before deciding what action to take or to answer any status question.")]
+    [McpServerTool(Name = "onair_get_state"), Description("Gets the full current state of onAIr: whether the teleprompter (TP) is open, locked, or hidden from screen share; whether the Controller window is hidden from screen share; recording status; the active AI chat provider; Whisper transcription model status (local vs cloud); font size, color, and family; teleprompter opacity; scroll mode (Manual/Auto/Voice) and its speed/step settings; the loaded script's filename; AND Q&A monitoring fields — the most recent question/answer, a turn counter that increments each completed Q&A round (poll this to detect new activity), the pacing (words-per-minute) summary, follow-up suggestions, whether a Q&A session recording is active, and the current Copilot-insight footer text. Use this before deciding what action to take, to answer any status question, or to monitor for new Q&A activity.")]
     public static Task<string> OnairGetState() => SafeAsync("onair_get_state", async () =>
     {
         var state = await OnAirClient.Instance.GetStateAsync();
         return JsonSerializer.Serialize(state, PrettyJson);
+    });
+
+    [McpServerTool(Name = "onair_get_last_qa_turn"), Description("Gets the most recently completed Q&A round: the transcribed question, the AI's answer, a turn counter (increments once per completed round — remember the last value you saw and compare to detect a NEW turn without re-reading the same one), the pacing (words-per-minute) summary, and follow-up question suggestions (if enabled). Use this to monitor onAIr's Q&A activity in real time, e.g. polling every few seconds during a live presentation to react to new questions as they're answered.")]
+    public static Task<string> OnairGetLastQaTurn() => SafeAsync("onair_get_last_qa_turn", async () =>
+    {
+        var state = await OnAirClient.Instance.GetStateAsync();
+        return JsonSerializer.Serialize(new
+        {
+            state.QaTurnCount,
+            state.LastQuestion,
+            state.LastAnswer,
+            state.PacingSummary,
+            state.FollowUpSuggestions,
+            state.QaSessionActive,
+        }, PrettyJson);
     });
 
     [McpServerTool(Name = "onair_get_script_text"), Description("Gets the full text of the script currently loaded in onAIr's teleprompter.")]
@@ -198,5 +213,21 @@ public static class OnAirTools
     {
         await OnAirClient.Instance.SendCommandAsync("ReleaseStealthContainer");
         return "Released the App Stealth container.";
+    });
+
+    [McpServerTool(Name = "onair_show_insight"), Description("Shows a short Copilot-insight message in a small footer on onAIr's teleprompter (TP), visible in BOTH Script and Q&A modes. Use this to surface a private heads-up, coaching note, or piece of context to the presenter WITHOUT it being confused for the AI's own Q&A answer or the script content — e.g. \"Client mentioned budget concerns in the last call\" or \"This prospect's renewal is in 30 days\". Text longer than 280 characters is truncated. Call onair_clear_insight to remove it.")]
+    public static Task<string> OnairShowInsight(
+        [Description("The insight text to show, ideally one or two short sentences")] string text)
+        => SafeAsync("onair_show_insight", async () =>
+        {
+            var (success, error) = await OnAirClient.Instance.ShowInsightAsync(text);
+            return success ? "Insight shown on the teleprompter." : $"Could not show insight: {error}";
+        });
+
+    [McpServerTool(Name = "onair_clear_insight"), Description("Clears the Copilot-insight footer from onAIr's teleprompter (TP), if one is currently shown.")]
+    public static Task<string> OnairClearInsight() => SafeAsync("onair_clear_insight", async () =>
+    {
+        var (success, error) = await OnAirClient.Instance.ClearInsightAsync();
+        return success ? "Insight cleared." : $"Could not clear insight: {error}";
     });
 }

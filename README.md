@@ -18,9 +18,10 @@ screen capture.
 
 [![Controller Script tab](OnAirNative/Assets/screenshots/screenshot-controller-script.png)](OnAirNative/Assets/screenshots/screenshot-controller-script.png)
 
-_The Controller is your presenter dashboard. Every tab is organised into cards. Choose scroll mode
-(Manual / Auto / Voice — only the active mode's speed control is shown), adjust font size and TP
-opacity, pick a font color, and load your `.txt` script. Large ▲▼ buttons are touch-friendly for a
+_The Controller is your presenter dashboard. Every tab is organised into cards. Load your `.txt`
+script — headings (`#`/`##`) automatically populate a **CHAPTERS** card for one-click navigation.
+Choose scroll mode (Manual / Auto / Voice — only the active mode's speed control is shown), adjust
+font size and TP opacity, and pick a font color. Large ▲▼ buttons are touch-friendly for a
 secondary screen. The footer's TP controls (**Open TP** · **Lock TP** · **Hide TP**) sit on the
 left, **Hide Controller** on the right._
 
@@ -117,8 +118,12 @@ including a shared screen or recording — while staying invisible to viewers by
 
 ### Script / Teleprompter
 - Load any `.txt` file from the Controller or via `Ctrl+Alt+O`
+- **Chapters** — `#`/`##` Markdown headings in your script automatically populate a **CHAPTERS**
+  card in the Controller; click any chapter to jump the TP straight to it (indented sub-levels for
+  `##`) — a plain script with no headings simply shows no chapters card
 - **Manual scroll** — `Ctrl+Alt+PgUp / PgDn`, step size tunable in the Controller (global, works
-  even when Teams has focus)
+  even when Teams has focus), plus large ▲▼ **virtual scroll buttons** for touch-friendly control
+  from a secondary screen or tablet
 - **Auto-scroll** — continuous smooth scroll; speed tunable in the Controller or via `Ctrl+Alt+. / ,`
 - **Voice-activated scroll** — real voice-activity detection (attack/release hysteresis, not a
   raw instantaneous level compare) with its own independent speed control (separate from
@@ -126,7 +131,11 @@ including a shared screen or recording — while staying invisible to viewers by
 - **Only the active scroll mode's control is shown** — Manual/Auto/Voice each get their own
   dedicated speed control in the Controller instead of all three competing for space
 - **Font size** — tunable in the Controller or via `Ctrl+Alt+= / -`, applies live to the TP
-- **Font color presets** — White, Yellow, Green, Aqua, Orange, Pink — saved to config
+- **TP opacity** — tunable in the Controller or via `Ctrl+Alt+] / [`
+- **Font color presets** — White, Yellow, Green, Aqua, Orange, Pink, or a custom hex value — saved
+  to config
+- **Font family picker** — any font installed on your system, applies live to the TP
+- **Save/Reset settings** — persist the current Appearance values, or restore the shipped defaults
 
 ### Q&A mode
 - **Record** from the Controller's Q&A tab (or `Ctrl+Alt+R`)
@@ -141,11 +150,28 @@ including a shared screen or recording — while staying invisible to viewers by
 - **7 chat providers** — Azure OpenAI · OpenAI · Groq · Anthropic Claude · Google Gemini · Mistral · Local LM
 - **Split providers** — use Groq for Whisper, Anthropic for chat, for example
 - **System prompt + presentation context** — customise tone, language, persona per session
+- **Max tokens per answer** — tunable slider (50-2000), controls answer length/cost
 - **Glossary + knowledge base** — custom vocabulary biases both transcription and answers; small
   reference documents (.txt/.md) get automatically searched for relevant excerpts per question
+- **Follow-up question suggestions** (optional toggle) — after each answer, a separate minimal AI
+  call suggests 2-3 questions *you* could ask the client next to keep the conversation flowing;
+  shown as plain text on the TP, never clickable
+- **Token usage counter** — running total of prompt/completion tokens for the session, with a
+  one-click reset
+- **Multi-turn conversation memory** — the last 6 Q&A turns are automatically included as context
+  for follow-up questions (invisible on the TP — the AI remembers, you don't see the clutter); a
+  **Clear conversation** button resets it
+- **Q&A session recording** — explicit **Start new session** / **Close session** buttons write a
+  live-appended Markdown transcript of every Q&A turn to disk; never automatic, and a new session
+  never inherits anything from the previous one (a different client/conversation starts clean). A
+  link opens the folder where saved sessions live — no in-app session browser
 - **Pacing coach** — a rough words-per-minute estimate after each recorded question, based on
   actual speaking time (pauses excluded); presenter-side only, shown in the Controller, never on
   the TP
+- **Real-time monitoring + Copilot insights via MCP** — an external MCP agent can poll each Q&A
+  turn as it completes (question, answer, pacing) and push a short coaching note into a
+  Copilot-insight footer on the TP itself — visible in both Script and Q&A modes, kept visually
+  separate from the AI's own Q&A answer; see [Remote control](#remote-control-stream-deck--ai-assistants)
 
 ### Controller window
 Every tab is organised into cards (bold, letter-spaced, accent-colored titles) that group related
@@ -154,13 +180,15 @@ shows icon+text and grows; the rest collapse to icon-only):
 - **Script tab**: file picker, scroll mode, per-mode speed control, font size/TP opacity/color
   (click a preset swatch to load its hex into the editable custom-color box), font family picker,
   save/reset settings, virtual ▲▼ buttons
-- **Q&A tab**: record button, status, chat/transcription provider selection + test connection,
-  system prompt, Whisper model
+- **Q&A tab**: record button, AI provider selection + test connection, prompts (system prompt,
+  presentation context, glossary, max tokens, follow-up suggestions toggle), knowledge base
+  reference documents, usage & conversation memory (with reset/clear), pacing coach, Q&A session
+  recording (start/close + open folder)
 - **App Stealth tab**: embed any Win32 window in a stealth container
-- **Settings tab**: audio device + capture source selection + live mic level test, one card per
-  AI provider (configure credentials and test each independently — see "AI providers" below),
-  voice scroll sensitivity, System/Light/Dark theme picker, Remote Control (Stream Deck + MCP)
-  toggle and setup
+- **Settings tab**: audio device + capture source selection + live mic level test, voice scroll
+  sensitivity, one card per AI provider (configure credentials and test each independently — see
+  "AI providers" below), local Whisper model file (load/unload), System/Light/Dark theme picker,
+  Remote Control (Stream Deck + MCP) toggle and setup
 - **About tab**: version, hotkey reference, GitHub link, check-for-updates with one-click install
 - **Single instance**: launching the app again just brings the existing Controller forward
 - **Footer**: the 3 TP controls (**Open TP** · **Lock TP** · **Hide TP**) on the left, **Hide
@@ -170,9 +198,9 @@ shows icon+text and grows; the rest collapse to icon-only):
 Configuring a provider's credentials is fully independent of which provider you're currently
 *using* for chat or transcription — no more switching the chat dropdown just to edit a different
 provider's key:
-- **6 provider cards in Settings** (Azure OpenAI · OpenAI · Groq · Anthropic Claude · Google
-  Gemini · Mistral), each showing a configured/not-configured status and a **Configure** button
-  that opens that provider's own credential editor + a **Test connection** button
+- **7 provider cards in Settings** (Azure OpenAI · OpenAI · Groq · Anthropic Claude · Google
+  Gemini · Mistral · Local LM), each showing a configured/not-configured status and a **Configure**
+  button that opens that provider's own credential editor + a **Test connection** button
 - **Q&A tab just picks which ones to use** — two dropdowns (chat provider, transcription
   provider) plus a **Test connection** button for whichever is currently selected
 - **Split providers** — e.g. Groq for chat, OpenAI for transcription — configure both
@@ -194,9 +222,22 @@ lets other apps on your PC control onAIr, never reachable from the network:
   sensitivity). Install via Settings → REMOTE CONTROL → **Install Stream Deck Plugin**.
 - **MCP server** (`mcp-server/`) — lets any Model Context Protocol client (Claude Desktop, VS
   Code Copilot Chat, etc.) control onAIr with natural language: "open the teleprompter", "set the
-  font color to blue", "load my demo script". 21 tools, each individually toggleable via
+  font color to blue", "load my demo script". 24 tools, each individually toggleable via
   Settings → REMOTE CONTROL → **MCP Tools & Setup…**, which also has a one-click **Copy MCP
   Config** button for registering the server with your AI client.
+- **Q&A monitoring + Copilot insights** — an MCP client can poll `onair_get_state` (or the more
+  focused `onair_get_last_qa_turn`) to watch onAIr's Q&A activity in real time: the transcribed
+  question, the AI's answer, a `qaTurnCount` counter that increments once per completed round
+  (compare it to the last value you saw to detect a new turn without re-reading the same one),
+  the pacing summary, and follow-up suggestions. This is the seam an EXTERNAL monitoring agent
+  uses to watch a live presentation — cross-reference the question against other systems (CRM,
+  docs, past emails) and react. `onair_show_insight` then pushes a short note into a small
+  **Copilot-insight footer** on the TP itself — visible in BOTH Script and Q&A modes, deliberately
+  separate from the AI's own Q&A answer so the presenter always knows "what to tell the client"
+  (the Q&A answer) apart from "a private heads-up from my copilot" (the insight). Call
+  `onair_clear_insight` to remove it. The "brain" that decides WHEN to surface an insight and
+  what other data to cross-reference is entirely external to onAIr — these three tools are only
+  the collection + delivery mechanism.
 
 ---
 
@@ -338,14 +379,45 @@ on the same network) — you need to explicitly opt in:
 The same idea applies to LM Studio (its own Developer → Server settings has a "Serve on Local
 Network" toggle) or `llama-server` (`--host 0.0.0.0` command-line flag).
 
+### Azure AI Foundry Local
+
+Yes — **Foundry Local already works with the existing Local LM provider, no new setup needed**.
+It exposes the exact same OpenAI-compatible `/v1/chat/completions` and `/v1/audio/transcriptions`
+endpoints Local LM already targets, so it's just a matter of pointing Local LM at it correctly:
+
+1. Install and start [Foundry Local](https://learn.microsoft.com/azure/foundry-local/get-started)
+   (`winget install Microsoft.FoundryLocal`), then load a model:
+   ```
+   foundry model run phi-4-mini-instruct-generic-cpu
+   ```
+2. **Find its actual endpoint** — unlike Ollama's fixed port 11434, Foundry Local's port is
+   **dynamic** (assigned per-run):
+   ```
+   foundry service status
+   ```
+   Note the URL it prints (e.g. `http://localhost:5272`) — append `/v1` for Local LM's Server
+   base URL field, e.g. `http://localhost:5272/v1`.
+3. In **Controller → Q&A tab → Local LM → ⚙ Configure provider…**, set:
+   - **Server base URL** — the dynamic endpoint from step 2, with `/v1` appended.
+   - **API Key** — leave blank (Foundry Local has no auth).
+   - **Chat model** — the exact model ID (NOT the alias you ran) — `foundry model run` prints the
+     real ID it loaded, e.g. `phi-4-mini-instruct-generic-cpu`, or check `foundry service status`.
+   - **Whisper model** — if you've also loaded a Whisper model (`foundry model run whisper-tiny`),
+     its model ID, e.g. `whisper-tiny`.
+4. Click **Test connection** to confirm.
+
+> **The port really does change** — if Local LM suddenly stops connecting after a Windows
+> restart or a `foundry service` restart, re-run `foundry service status` and update the Server
+> base URL. This is a Foundry Local characteristic, not an onAIr limitation.
+
 ### A note on transcription-only servers (e.g. whisper.cpp's own bundled server)
 
 Local LM's fixed `/audio/transcriptions` path convention targets the more standardized
-OpenAI-compatible server shape (Ollama, LM Studio, LocalAI, llama-server) — **not** whisper.cpp's
-own bundled `whisper-server`, which uses a different, non-standard `/inference` endpoint. If you
-specifically want to run whisper.cpp's own server for transcription, use the fully in-process
-[local Whisper model](#whisper-local-model-optional) instead (same underlying whisper.cpp
-technology, no separate server process needed) — or run
+OpenAI-compatible server shape (Ollama, LM Studio, LocalAI, llama-server, Foundry Local) — **not**
+whisper.cpp's own bundled `whisper-server`, which uses a different, non-standard `/inference`
+endpoint. If you specifically want to run whisper.cpp's own server for transcription, use the
+fully in-process [local Whisper model](#whisper-local-model-optional) instead (same underlying
+whisper.cpp technology, no separate server process needed) — or run
 [speaches](https://github.com/speaches-ai/speaches) or [LocalAI](https://localai.io), both of
 which do implement the standard `/v1/audio/transcriptions` path Local LM expects.
 
@@ -359,7 +431,7 @@ which do implement the standard `/v1/audio/transcriptions` path Local LM expects
   onAIr-side problem.
 - **Model not found** — the model name in onAIr's Local LM settings must match exactly what the
   server has available (`ollama list` shows what's pulled; LM Studio shows loaded models in its
-  own UI).
+  own UI; Foundry Local's model ID, not alias — see above).
 - **Transcription fails with "no Whisper model configured"** — set the **Whisper model** field in
   Local LM's config (Settings → AI PROVIDERS → Local LM → Configure), or pick a different
   Transcription provider if your server doesn't support transcription at all.
@@ -392,7 +464,7 @@ into **both**:
 
 ### Knowledge base (reference documents)
 
-Attach small `.txt`/`.md` reference documents (Settings → KNOWLEDGE BASE → **+ Add file(s)…**) —
+Attach small `.txt`/`.md` reference documents (Q&A tab → KNOWLEDGE BASE → **+ Add file(s)…**) —
 product spec sheets, FAQs, pricing, anything you'd otherwise have to remember. When you ask a
 question, onAIr automatically searches the attached documents for relevant excerpts and includes
 only those in the AI's context — nothing is searched or shown manually.

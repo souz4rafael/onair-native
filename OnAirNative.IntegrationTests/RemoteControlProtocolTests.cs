@@ -133,4 +133,62 @@ public class RemoteControlProtocolTests : IClassFixture<OnAirAppFixture>
             await _app.WaitForStateAsync(data => data.GetProperty("tpOpen").GetBoolean() == originalTpOpen, TimeSpan.FromSeconds(15));
         }
     }
+
+    // ── Q&A monitoring + Copilot insights (Block 6) ───────────────────────────
+
+    [Fact]
+    public async Task GetState_IncludesQaMonitoringFields()
+    {
+        var data = await _app.GetStateAsync();
+
+        // Fresh app, nothing recorded yet — spot-check the Block 6 fields exist with sane
+        // "nothing has happened" defaults, same "representative field per type" spirit as
+        // GetState_ReturnsExpectedShape above.
+        Assert.True(data.TryGetProperty("lastQuestion", out var q) && q.ValueKind == JsonValueKind.String);
+        Assert.True(data.TryGetProperty("lastAnswer", out var a) && a.ValueKind == JsonValueKind.String);
+        Assert.True(data.TryGetProperty("qaTurnCount", out var count) && count.GetInt32() >= 0);
+        Assert.True(data.TryGetProperty("pacingSummary", out var pacing) && pacing.ValueKind == JsonValueKind.String);
+        Assert.True(data.TryGetProperty("followUpSuggestions", out var suggestions) && suggestions.ValueKind == JsonValueKind.Array);
+        Assert.True(data.TryGetProperty("qaSessionActive", out var sessionActive) && sessionActive.ValueKind is JsonValueKind.True or JsonValueKind.False);
+        Assert.True(data.TryGetProperty("insightText", out var insight) && insight.ValueKind == JsonValueKind.String);
+    }
+
+    [Fact]
+    public async Task ShowInsight_ThenGetState_ReflectsInsightText()
+    {
+        try
+        {
+            using var showResult = await _app.RequestAsync("showInsight", new Dictionary<string, object?> { ["text"] = "Integration test insight" });
+            Assert.True(showResult.RootElement.GetProperty("success").GetBoolean());
+
+            var data = await _app.GetStateAsync();
+            Assert.Equal("Integration test insight", data.GetProperty("insightText").GetString());
+        }
+        finally
+        {
+            await _app.RequestAsync("clearInsight");
+        }
+    }
+
+    [Fact]
+    public async Task ClearInsight_AfterShowInsight_EmptiesInsightText()
+    {
+        using (var showResult = await _app.RequestAsync("showInsight", new Dictionary<string, object?> { ["text"] = "Temporary insight" }))
+            Assert.True(showResult.RootElement.GetProperty("success").GetBoolean());
+
+        using var clearResult = await _app.RequestAsync("clearInsight");
+        Assert.True(clearResult.RootElement.GetProperty("success").GetBoolean());
+
+        var data = await _app.GetStateAsync();
+        Assert.Equal("", data.GetProperty("insightText").GetString());
+    }
+
+    [Fact]
+    public async Task ShowInsight_BlankText_ReturnsFailure()
+    {
+        using var result = await _app.RequestAsync("showInsight", new Dictionary<string, object?> { ["text"] = "" });
+
+        Assert.False(result.RootElement.GetProperty("success").GetBoolean());
+        Assert.True(result.RootElement.TryGetProperty("error", out _));
+    }
 }

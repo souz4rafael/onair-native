@@ -33,6 +33,38 @@ public sealed class RemoteState
     /// <summary>Display filename of the currently loaded script (e.g. "demo.txt"), or the
     /// placeholder text when nothing is loaded — mirrors <c>ScrollTabViewModel.LoadedFileName</c>.</summary>
     public string LoadedScriptName        { get; set; } = "";
+
+    // ── Q&A monitoring + Copilot insights (Block 6) ───────────────────────────
+    // See OverlayViewModel's own doc comments for the full design rationale. All of these are
+    // read-only from an MCP/WebSocket client's perspective except InsightText, which is written
+    // via the "showInsight"/"clearInsight" ops (see RemoteControlService's protocol doc comment).
+
+    /// <summary>The most recently transcribed question, regardless of whether a Q&amp;A session
+    /// (Markdown recording — see <see cref="QaSessionActive"/>) is active. Empty until the first
+    /// successful Q&amp;A round this app launch.</summary>
+    public string LastQuestion             { get; set; } = "";
+    /// <summary>The AI's answer to <see cref="LastQuestion"/>.</summary>
+    public string LastAnswer               { get; set; } = "";
+    /// <summary>Increments once per successfully completed Q&amp;A round — a change-detection
+    /// heartbeat for a polling monitor: remember the last value seen and treat a higher one as
+    /// "there's a new turn to look at", cheaper and more robust than diffing question/answer text
+    /// (which could legitimately repeat verbatim across two different turns).</summary>
+    public int    QaTurnCount              { get; set; }
+    /// <summary>Words-per-minute pacing summary for the most recent recording (see
+    /// PacingAnalyzer), or a neutral "not enough data" message — same text shown in the
+    /// Controller's USAGE &amp; CONVERSATION card, never on the TP itself.</summary>
+    public string PacingSummary            { get; set; } = "";
+    /// <summary>Follow-up questions the presenter could ask the client next (see
+    /// AiChatService.GetFollowUpSuggestionsAsync) — empty unless AppConfig.
+    /// ShowFollowUpSuggestions is on AND the most recent turn actually returned some.</summary>
+    public List<string> FollowUpSuggestions { get; set; } = [];
+    /// <summary>Whether a Q&amp;A session (an explicit, presenter-started Markdown transcript —
+    /// see QaSessionService) is currently recording.</summary>
+    public bool   QaSessionActive          { get; set; }
+    /// <summary>Free text currently shown in the TP's Copilot-insight footer (visible in both
+    /// Script and Q&amp;A modes) — set via the "showInsight" op / onair_show_insight tool, cleared
+    /// via "clearInsight" / onair_clear_insight. Empty means no insight is currently shown.</summary>
+    public string InsightText              { get; set; } = "";
 }
 
 /// <summary>
@@ -57,11 +89,14 @@ public sealed class RemoteState
 ///                       {"op":"loadScript","id":"<optional>","path":"C:\\scripts\\demo.txt"}
 ///                       {"op":"getScriptText","id":"<optional>"}
 ///                       {"op":"listFonts","id":"<optional>"}
+///                       {"op":"showInsight","id":"<optional>","text":"..."}
+///                       {"op":"clearInsight","id":"<optional>"}
 ///   onAIr → plugin/MCP: {"op":"state","data":{ ...RemoteState fields... }}   (broadcast to all)
 ///                       {"op":"result","id":"<echoed>","success":true|false,"error":"...","data":...}
 ///                                                       (reply to exactly the requesting client,
 ///                                                        only for set/loadScript/getScriptText/
-///                                                        listFonts — command/adjust/getState stay
+///                                                        listFonts/showInsight/clearInsight —
+///                                                        command/adjust/getState stay
 ///                                                        fire-and-forget, relying on the state
 ///                                                        broadcast instead, unchanged for the
 ///                                                        existing Stream Deck plugin)
@@ -83,6 +118,8 @@ public sealed class RemoteControlService : IDisposable
     private readonly Func<string, Task<(bool Success, string? Error)>> _loadScript;
     private readonly Func<string> _getScriptText;
     private readonly Func<List<string>> _listFonts;
+    private readonly Func<string, (bool Success, string? Error)> _showInsight;
+    private readonly Func<(bool Success, string? Error)> _clearInsight;
     private readonly DispatcherQueue _uiQueue;
     private readonly HttpListener _listener = new();
     private readonly List<WebSocket> _clients = [];
@@ -98,7 +135,9 @@ public sealed class RemoteControlService : IDisposable
         Func<string, JsonElement, (bool Success, string? Error)> setField,
         Func<string, Task<(bool Success, string? Error)>> loadScript,
         Func<string> getScriptText,
-        Func<List<string>> listFonts)
+        Func<List<string>> listFonts,
+        Func<string, (bool Success, string? Error)> showInsight,
+        Func<(bool Success, string? Error)> clearInsight)
     {
         _executeAction = executeAction;
         _getState      = getState;
@@ -106,6 +145,8 @@ public sealed class RemoteControlService : IDisposable
         _loadScript    = loadScript;
         _getScriptText = getScriptText;
         _listFonts     = listFonts;
+        _showInsight   = showInsight;
+        _clearInsight  = clearInsight;
         _uiQueue       = uiQueue;
         _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
 
@@ -285,6 +326,28 @@ public sealed class RemoteControlService : IDisposable
                 {
                     var fonts = _listFonts();
                     _ = SendResultAsync(socket, id, true, null, fonts);
+                });
+                return;
+            }
+
+            if (op == "showInsight" &&
+                root.TryGetProperty("text", out var textEl) &&
+                textEl.GetString() is string insightText)
+            {
+                _uiQueue.TryEnqueue(() =>
+                {
+                    var (success, error) = _showInsight(insightText);
+                    _ = SendResultAsync(socket, id, success, error);
+                });
+                return;
+            }
+
+            if (op == "clearInsight")
+            {
+                _uiQueue.TryEnqueue(() =>
+                {
+                    var (success, error) = _clearInsight();
+                    _ = SendResultAsync(socket, id, success, error);
                 });
                 return;
             }

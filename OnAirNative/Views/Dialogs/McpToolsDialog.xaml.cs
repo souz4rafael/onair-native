@@ -20,7 +20,8 @@ public sealed partial class McpToolsDialog : ContentDialog
     private static readonly (string Group, string Name, string Title, string Description)[] Tools =
     [
         ("READ-ONLY",              "onair_is_running",               "Is running",           "Checks onAIr is reachable"),
-        ("READ-ONLY",              "onair_get_state",                "Get state",            "Reads TP/lock/recording/font/scroll status"),
+        ("READ-ONLY",              "onair_get_state",                "Get state",            "Reads TP/lock/recording/font/scroll/Q&A status"),
+        ("READ-ONLY",              "onair_get_last_qa_turn",         "Get last Q&A turn",    "Reads the most recent question/answer + turn counter, for monitoring"),
         ("READ-ONLY",              "onair_get_script_text",          "Get script text",      "Reads the loaded script's full text"),
         ("READ-ONLY",              "onair_list_fonts",               "List fonts",           "Lists fonts installed on this PC"),
         ("TELEPROMPTER CONTROL",   "onair_toggle_tp",                "Toggle TP",            "Opens/closes the teleprompter"),
@@ -28,6 +29,8 @@ public sealed partial class McpToolsDialog : ContentDialog
         ("TELEPROMPTER CONTROL",   "onair_toggle_hide_tp",           "Toggle hide TP",       "Hides/shows the TP in screen share"),
         ("TELEPROMPTER CONTROL",   "onair_toggle_hide_controller",   "Toggle hide Controller","Hides/shows the Controller in screen share"),
         ("TELEPROMPTER CONTROL",   "onair_load_script",              "Load script",          "Loads a .txt script by path"),
+        ("TELEPROMPTER CONTROL",   "onair_show_insight",             "Show insight",         "Shows a Copilot note in the TP's footer (Script + Q&A modes)"),
+        ("TELEPROMPTER CONTROL",   "onair_clear_insight",            "Clear insight",        "Clears the TP's Copilot-insight footer"),
         ("SCROLL & APPEARANCE",    "onair_set_scroll_mode",          "Set scroll mode",      "Manual / Auto / Voice"),
         ("SCROLL & APPEARANCE",    "onair_set_scroll_speed",         "Set scroll speed",     "Auto mode's speed"),
         ("SCROLL & APPEARANCE",    "onair_set_voice_scroll_speed",   "Set voice scroll speed","Voice mode's speed"),

@@ -116,6 +116,47 @@ public partial class OverlayViewModel : ObservableObject
     // here for the whole overlay's lifetime.
     private readonly KnowledgeBaseService _knowledgeBase = new();
 
+    // ── Remote monitoring + Copilot insights (Block 6) ────────────────────────
+    // QaTurnCount is a pure change-detection heartbeat for an EXTERNAL agent polling
+    // RemoteState/onair_get_last_qa_turn over MCP/WebSocket — it increments once per
+    // successfully completed Q&A round (see AskAndAnswerAsync), completely independent of
+    // ConversationTurnCount (which is capped at 6 and reset by "Clear conversation" — that's
+    // the AI's OWN memory retention, a different concern from "did a new turn just happen").
+    // A monitoring agent remembers the last QaTurnCount it saw and treats a higher value as
+    // "there's a new question+answer to look at" — cheaper and more robust than string-diffing
+    // QaQuestion/QaAnswer (which could coincidentally repeat verbatim on two different turns).
+    [ObservableProperty] private int _qaTurnCount;
+
+    // Free text an EXTERNAL agent (connected via MCP — see App.ShowInsightRemote /
+    // onair_show_insight) can push to appear in a small footer on the TP, visible in BOTH
+    // Script and Q&A modes (see OverlayWindow.xaml's footer row, a sibling of both mode panels,
+    // not inside either one — this is deliberately NOT part of the AI's own Q&A answer, so the
+    // presenter can always tell "what I should tell the client" (QaAnswer) apart from "a private
+    // heads-up from my copilot" (this). Never persisted to AppConfig — a live, ephemeral signal
+    // from an external agent, not a setting. Use SetInsight/ClearInsight, not this property's
+    // raw setter directly, so the length cap below is never bypassed.
+    [ObservableProperty] private string _insightText = "";
+
+    /// <summary>Max characters shown in the TP's insight footer — long enough for a genuinely
+    /// useful one-or-two-sentence coaching note, short enough that it can never grow into a
+    /// second wall of text competing with the actual Q&A answer for the presenter's attention.</summary>
+    private const int MaxInsightLength = 280;
+
+    /// <summary>Sets the Copilot insight footer text — truncates to <see cref="MaxInsightLength"/>
+    /// (with a trailing "…") rather than rejecting an overlong value outright, so a slightly
+    /// verbose external agent still gets SOMETHING useful shown instead of an opaque failure.
+    /// Blank/whitespace-only input is treated as <see cref="ClearInsight"/> instead of leaving a
+    /// stale value in place.</summary>
+    public void SetInsight(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) { ClearInsight(); return; }
+        InsightText = text.Length > MaxInsightLength ? text[..MaxInsightLength] + "…" : text;
+    }
+
+    /// <summary>Clears the Copilot insight footer — collapses it entirely on the TP (see
+    /// OverlayWindow's InsightText PropertyChanged handler).</summary>
+    public void ClearInsight() => InsightText = "";
+
     /// <summary>Whether a Q&amp;A session is currently recording — lets the Controller
     /// enable/disable the "Close session" button appropriately (nothing to close when no
     /// session is active).</summary>
@@ -428,14 +469,14 @@ public partial class OverlayViewModel : ObservableObject
 
     public async Task OpenFilePickerAsync(Window ownerWindow)
     {
-        var picker = new Windows.Storage.Pickers.FileOpenPicker();
-        WinRT.Interop.InitializeWithWindow.Initialize(picker,
-            WinRT.Interop.WindowNative.GetWindowHandle(ownerWindow));
-        picker.FileTypeFilter.Add(".txt");
-        picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
-
-        var file = await picker.PickSingleFileAsync();
-        if (file is not null) await LoadScriptAsync(file.Path);
+        // Win32FileDialog (classic in-process IFileOpenDialog COM interface) instead of
+        // Windows.Storage.Pickers.FileOpenPicker — the WinRT picker hangs forever with no
+        // dialog ever appearing in this unpackaged app under some session types (its broker
+        // process, PickerHost.exe, spawns but never creates a window). See Win32FileDialog's
+        // own doc comment for the full root-cause writeup.
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(ownerWindow);
+        var path = Win32.Win32FileDialog.PickSingleFile(hwnd, "Text files", "txt");
+        if (path is not null) await LoadScriptAsync(path);
     }
 
     // Re-parses into ScriptDocument every time the raw text changes (new file loaded, remote
@@ -548,6 +589,12 @@ public partial class OverlayViewModel : ObservableObject
 
         if (_config.Current.ShowFollowUpSuggestions)
             await FetchFollowUpSuggestionsAsync(question, ans.Text);
+
+        // Incremented LAST, once every other field this turn touches (QaAnswer, PacingSummary,
+        // FollowUpSuggestions) is fully settled — an external agent polling on QaTurnCount as its
+        // "something new happened" signal (see this property's own doc comment) should never
+        // observe a bumped counter alongside stale/still-populating follow-up suggestions.
+        QaTurnCount++;
     }
 
     private async Task FetchFollowUpSuggestionsAsync(string question, string answer)
