@@ -104,13 +104,20 @@
     <PackageReference Include="Whisper.net" Version="1.7.3" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.7.3" />
 
-    <!-- DPAPI secret-at-rest encryption for API keys (ProtectedData) -->
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
-
     <!-- Enumerates fonts actually installed on the user's PC for the Appearance font-family
          picker (System.Drawing.Text.InstalledFontCollection). Windows-only API — safe here
          since the TFM is already net8.0-windows10.0.19041.0 (no CA1416 warnings). -->
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Pure, WinUI-free logic (script parsing, config load/save, AI provider routing,
+         update-check version comparison) — extracted here specifically so
+         OnAirNative.Tests can unit-test it directly without dragging the full WinUI/MSIX
+         PRI-generation build tooling into a plain test project (that combination doesn't
+         build outside a full WinUI/UWP SDK install). Brings System.Security.Cryptography.
+         ProtectedData transitively (was a direct PackageReference here before the move). -->
+    <ProjectReference Include="..\OnAirNative.Core\OnAirNative.Core.csproj" />
   </ItemGroup>
 
   <!--

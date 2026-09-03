@@ -10,7 +10,11 @@ public record TranscriptionResult(bool Success, string Text = "", string? Error 
 /// <summary>
 /// Transcribes audio to text using either:
 ///   1. Whisper.net (in-process ggml model) — fast, no network, model file required
-///   2. Cloud API (Azure / OpenAI / Groq Whisper)
+///   2. Cloud API (Azure / OpenAI / Groq Whisper), OR provider key "local" — the SAME
+///      self-hosted OpenAI-compatible server (Ollama/LM Studio/llama-server/LocalAI) config
+///      used for chat (<see cref="AppConfig.Local"/>), just addressed at its
+///      /audio/transcriptions path with its own WhisperModel field — on this machine or
+///      another one on the LAN.
 ///
 /// Which one is used is an explicit choice (<see cref="AppConfig.UseLocalWhisper"/>, set via the
 /// Q&amp;A tab's "Use local Whisper model" checkbox) — NOT automatically inferred from whether a
@@ -23,6 +27,7 @@ public sealed class WhisperService : IDisposable
     private WhisperFactory?   _factory;
     private WhisperProcessor? _processor;
     private string?           _loadedPath;
+    private string?           _loadedPrompt;
 
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(90) };
 
@@ -40,28 +45,39 @@ public sealed class WhisperService : IDisposable
 
     // ── Local model management ────────────────────────────────────────────────
 
-    public async Task<bool> LoadModelAsync(string modelPath)
+    /// <param name="initialPrompt">Optional vocabulary-bias text (AppConfig.Glossary) — baked
+    /// into the processor at build time via whisper.cpp's own prompt-biasing mechanism (see
+    /// Whisper.net's WhisperProcessorBuilder.WithPrompt). Unlike the cloud APIs' per-request
+    /// "prompt" form field, this is fixed for the lifetime of the loaded processor: changing the
+    /// glossary text after a model is already loaded only takes effect on the NEXT load (Settings
+    /// → WHISPER MODEL → Load/Unload → Load again) — a reasonable, documented trade-off rather
+    /// than adding "rebuild processor on every config change" plumbing for a value that's set up
+    /// once before a presentation, not tweaked mid-session.</param>
+    public async Task<bool> LoadModelAsync(string modelPath, string? initialPrompt = null)
     {
-        if (_loadedPath == modelPath && _factory is not null) return true;
+        if (_loadedPath == modelPath && _loadedPrompt == initialPrompt && _factory is not null) return true;
         try
         {
             _processor?.Dispose();
             _factory?.Dispose();
 
             _factory = await Task.Run(() => WhisperFactory.FromPath(modelPath));
-            _processor = _factory.CreateBuilder()
-                .WithLanguage("auto")
-                .Build();
+            var builder = _factory.CreateBuilder().WithLanguage("auto");
+            if (!string.IsNullOrWhiteSpace(initialPrompt))
+                builder = builder.WithPrompt(initialPrompt);
+            _processor = builder.Build();
 
-            _loadedPath = modelPath;
+            _loadedPath   = modelPath;
+            _loadedPrompt = initialPrompt;
             return true;
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Whisper] Model load failed: {ex.Message}");
-            _factory    = null;
-            _processor  = null;
-            _loadedPath = null; // so retrying the same path doesn't short-circuit on the stale hit above
+            _factory      = null;
+            _processor    = null;
+            _loadedPath   = null; // so retrying the same path doesn't short-circuit on the stale hit above
+            _loadedPrompt = null;
             return false;
         }
     }
@@ -77,9 +93,10 @@ public sealed class WhisperService : IDisposable
     {
         _processor?.Dispose();
         _factory?.Dispose();
-        _processor  = null;
-        _factory    = null;
-        _loadedPath = null;
+        _processor    = null;
+        _factory      = null;
+        _loadedPath   = null;
+        _loadedPrompt = null;
     }
 
     // ── Public transcription entry point ──────────────────────────────────────
@@ -153,6 +170,19 @@ public sealed class WhisperService : IDisposable
                     return new TranscriptionResult(false, Error: "Azure: endpoint, API key, and Whisper deployment are required.");
                 url = $"{a.Endpoint.TrimEnd('/')}/openai/deployments/{Uri.EscapeDataString(a.WhisperDeployment)}/audio/transcriptions?api-version=2024-06-01";
             }
+            else if (provider == "local")
+            {
+                // Self-hosted OpenAI-compatible server (Ollama/LM Studio/llama-server/LocalAI) —
+                // the SAME config (AppConfig.Local) used for chat, just a different path/model
+                // field. Requires WhisperModel to be configured: a blank value means this
+                // provider hasn't actually been set up for transcription (e.g. plain Ollama has
+                // no transcription support at all — only servers like LocalAI implement
+                // /v1/audio/transcriptions).
+                if (string.IsNullOrEmpty(cfg.Local.WhisperModel))
+                    return new TranscriptionResult(false, Error: "Local LM: no Whisper model configured — set one in Settings → AI PROVIDERS → Local LM.");
+                url       = $"{cfg.Local.BaseUrl.TrimEnd('/')}/audio/transcriptions";
+                modelName = cfg.Local.WhisperModel;
+            }
             else
             {
                 url       = provider == "groq" ? "https://api.groq.com/openai/v1/audio/transcriptions"
@@ -169,6 +199,15 @@ public sealed class WhisperService : IDisposable
 
             if (modelName is not null)
                 form.Add(new StringContent(modelName), "model");
+
+            // Whisper's "prompt" parameter biases transcription toward specific vocabulary/
+            // spelling (product names, jargon, acronyms) — a real, documented part of the
+            // OpenAI-compatible transcription API. Sent for every cloud/local-server branch
+            // above uniformly, since they all share this same multipart shape; only added when
+            // the user actually configured a glossary (AppConfig.Glossary), same opt-in
+            // behavior as the local in-process model's WithPrompt (see LoadModelAsync).
+            if (!string.IsNullOrWhiteSpace(cfg.Glossary))
+                form.Add(new StringContent(cfg.Glossary), "prompt");
 
             using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = form };
             ApplyAuth(req, provider, cfg);
@@ -206,6 +245,15 @@ public sealed class WhisperService : IDisposable
     {
         if (provider == "azure")
             req.Headers.Add("api-key", cfg.Azure.Key);
+        else if (provider == "local")
+        {
+            // Local/self-hosted servers routinely have no auth at all — a malformed empty
+            // Bearer token can behave unpredictably depending on the server/reverse proxy, so
+            // the header is simply omitted when there's no real key configured (mirrors
+            // AiChatService's identical relaxation for the Local LM chat provider).
+            if (!string.IsNullOrEmpty(cfg.Local.Key))
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.Local.Key);
+        }
         else
         {
             var key = provider == "groq" ? cfg.Groq.Key : cfg.OpenAi.Key;

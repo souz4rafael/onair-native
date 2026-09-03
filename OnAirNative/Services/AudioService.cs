@@ -432,35 +432,15 @@ public sealed class AudioService : IDisposable
         _rmsCallback(CalculateRms(e.Buffer, e.BytesRecorded, fmt));
     }
 
-    /// <summary>Returns RMS amplitude scaled to 0–100.</summary>
+    /// <summary>Returns RMS amplitude scaled to 0–100 — delegates to the shared
+    /// <see cref="AudioLevel.CalculateRms"/> (OnAirNative.Core) so the exact same formula is
+    /// used here (live device callbacks) and in PacingAnalyzer (replaying an already-recorded
+    /// WAV) — the same AppConfig.Appearance.VoiceRmsThreshold value must mean the same thing in
+    /// both places.</summary>
     private static float CalculateRms(byte[] buffer, int bytes, WaveFormat? fmt)
     {
-        if (fmt is null || bytes == 0) return 0f;
-
-        double sumSq = 0;
-        int count = 0;
-
-        if (fmt.Encoding == WaveFormatEncoding.IeeeFloat && fmt.BitsPerSample == 32)
-        {
-            for (int i = 0; i + 3 < bytes; i += 4)
-            {
-                float s = BitConverter.ToSingle(buffer, i);
-                sumSq += s * s;
-                count++;
-            }
-        }
-        else if (fmt.BitsPerSample == 16)
-        {
-            for (int i = 0; i + 1 < bytes; i += 2)
-            {
-                float s = BitConverter.ToInt16(buffer, i) / 32768f;
-                sumSq += s * s;
-                count++;
-            }
-        }
-
-        if (count == 0) return 0f;
-        return (float)(Math.Sqrt(sumSq / count) * 100.0);
+        if (fmt is null) return 0f;
+        return AudioLevel.CalculateRms(buffer, bytes, fmt.BitsPerSample, fmt.Encoding == WaveFormatEncoding.IeeeFloat);
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────────

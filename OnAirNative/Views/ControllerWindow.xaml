@@ -244,6 +244,16 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Card: Chapters — only shown once the loaded script has at least one
+                         "# " / "## " heading (see ScriptParser). Click a chapter to jump the TP
+                         straight to it via ScrollTabViewModel.JumpToChapterCommand. -->
+                    <Border x:Name="ChaptersCard" Style="{StaticResource CardBorderStyle}" Visibility="Collapsed">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="CHAPTERS" Style="{StaticResource CardTitleStyle}"/>
+                            <StackPanel x:Name="ChaptersListPanel" Spacing="2"/>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Card: Scroll mode selector -->
                     <Border Style="{StaticResource CardBorderStyle}">
                         <StackPanel Spacing="10">
@@ -485,6 +495,118 @@
                                      TextWrapping="Wrap"
                                      PlaceholderText="e.g. 'Presenting Azure AI Foundry to Contoso…'"
                                      TextChanged="PresentationContextBox_TextChanged"/>
+
+                            <TextBlock Text="Glossary / vocabulary (product names, jargon, acronyms)"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBox x:Name="GlossaryBox"
+                                     AcceptsReturn="True"
+                                     Height="60"
+                                     TextWrapping="Wrap"
+                                     PlaceholderText="e.g. 'Contoso, Northwind Traders, SKU-4471, Kubernetes'"
+                                     TextChanged="GlossaryBox_TextChanged"/>
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="Improves BOTH accuracy: biases Whisper transcription toward these exact words, and answer quality: tells the AI to use these exact terms/spellings. Changing this only affects an already-loaded local Whisper model on its next Load."/>
+
+                            <TextBlock Text="Max tokens per answer" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <Slider x:Name="MaxTokensSlider" ValueChanged="MaxTokensSlider_ValueChanged"/>
+
+                            <CheckBox x:Name="ShowFollowUpSuggestionsCheckBox"
+                                      Content="Suggest questions to ask the client"
+                                      Checked="ShowFollowUpSuggestionsCheckBox_Toggled"
+                                      Unchecked="ShowFollowUpSuggestionsCheckBox_Toggled"/>
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="After each answer, asks the AI (a separate, minimal call — extra usage) for 2-3 questions YOU could ask the client next to keep the conversation flowing. Shown as plain text on the TP (not clickable)."/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Usage + conversation memory -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="USAGE &amp; CONVERSATION" Style="{StaticResource CardTitleStyle}"/>
+
+                            <TextBlock Text="Token usage (this session)" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="UsageSummaryText"
+                                       FontSize="13"
+                                       TextWrapping="Wrap"/>
+                            <Button Content="Reset usage counter"
+                                    HorizontalAlignment="Stretch"
+                                    Click="ResetUsage_Click"/>
+
+                            <TextBlock Text="Q&amp;A conversation memory"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="ConversationTurnCountText"
+                                       FontSize="13"
+                                       TextWrapping="Wrap"
+                                       Text="No turns remembered yet."/>
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="Follow-up questions in the same session build on prior Q&amp;A automatically (last 6 turns). Clear if you want the next question answered with no memory of earlier ones."/>
+                            <Button Content="Clear conversation"
+                                    HorizontalAlignment="Stretch"
+                                    Click="ClearConversation_Click"/>
+
+                            <TextBlock Text="Pacing (last answer)"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="PacingSummaryText"
+                                       FontSize="13"
+                                       TextWrapping="Wrap"
+                                       Text="No pacing data yet."/>
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="A rough words-per-minute estimate for your last recorded question, based on actual speaking time (pauses excluded). A gentle guide, not a strict rule — presenter-side only, never shown on the TP."/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Q&A session recording — a session is a live-appended Markdown
+                         transcript of every Q&A turn, entirely separate from the conversation
+                         memory above (that's what the AI remembers; this is a durable file
+                         record). Never created automatically — the user must click "Start new
+                         session". Starting one always makes a brand-new file AND clears the
+                         conversation memory (another client/conversation inherits nothing).
+                         "Close session" stops recording to the current file WITHOUT starting a
+                         new one — the only other way to stop besides closing the whole app. -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Q&amp;A SESSION RECORDING" Style="{StaticResource CardTitleStyle}"/>
+
+                            <TextBlock x:Name="QaSessionStatusText"
+                                       FontSize="13"
+                                       TextWrapping="Wrap"
+                                       Text="No active session."/>
+
+                            <TextBlock Text="Session label (optional)" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBox x:Name="QaSessionLabelBox" PlaceholderText="e.g. 'Contoso'"/>
+
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0"
+                                        Content="Start new session"
+                                        HorizontalAlignment="Stretch"
+                                        Click="StartNewQaSession_Click"/>
+                                <Button Grid.Column="1"
+                                        x:Name="CloseQaSessionBtn"
+                                        Content="Close session"
+                                        HorizontalAlignment="Stretch"
+                                        IsEnabled="False"
+                                        Click="CloseQaSession_Click"/>
+                            </Grid>
+                            <Button Content="Open sessions folder"
+                                    HorizontalAlignment="Stretch"
+                                    Click="OpenQaSessionsFolder_Click"/>
+
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="Starting a new session always creates a fresh file and clears the conversation memory above — nothing carries over between sessions. Close session stops recording without starting a new one."/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -628,6 +750,15 @@
                                         <Button Translation="0,0,20" Content="Configure" FontSize="12" Padding="10,5" Tag="mistral" Click="ConfigureProviderCard_Click"/>
                                     </StackPanel>
                                 </Border>
+                                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6" Padding="10,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Local LM" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="LocalProviderStatus" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        </StackPanel>
+                                        <Button Translation="0,0,20" Content="Configure" FontSize="12" Padding="10,5" Tag="local" Click="ConfigureProviderCard_Click"/>
+                                    </StackPanel>
+                                </Border>
                             </controls:WrapPanel>
                         </StackPanel>
                     </Border>
@@ -671,6 +802,32 @@
                             <HyperlinkButton Content="Download local models (ggml .bin) from huggingface.co"
                                              NavigateUri="https://huggingface.co/ggerganov/whisper.cpp"
                                              Padding="0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Knowledge base (Block 3) — lightweight keyword-relevance search
+                         over small reference documents (.txt/.md). NOT an embeddings/vector-DB
+                         pipeline (see KnowledgeBaseService's doc comment) — relevant excerpts are
+                         found and injected automatically per-question, nothing to search
+                         manually. Glossary lives in the Q&A tab's PROMPTS card instead (it's a
+                         short prompt-like field, not a file list). -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="KNOWLEDGE BASE" Style="{StaticResource CardTitleStyle}"/>
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="Attach small reference documents (.txt/.md — product specs, FAQs, pricing). The most relevant excerpts are automatically included when answering a question — no manual search needed."/>
+
+                            <StackPanel x:Name="KnowledgeBaseFilesPanel" Spacing="6"/>
+                            <TextBlock x:Name="KnowledgeBaseEmptyText"
+                                       FontSize="12"
+                                       Opacity="0.6"
+                                       Text="No reference documents attached yet."/>
+
+                            <Button Content="+ Add file(s)…"
+                                    HorizontalAlignment="Stretch"
+                                    Click="AddKnowledgeBaseFile_Click"/>
                         </StackPanel>
                     </Border>
 

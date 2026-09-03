@@ -2,6 +2,8 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Documents;
+using OnAirNative.Models;
 using OnAirNative.Services;
 using OnAirNative.ViewModels;
 using OnAirNative.Win32;
@@ -21,6 +23,20 @@ public sealed partial class OverlayWindow : Window
 
     private IntPtr     _hwnd;
 
+    // Script rendering: one entry per ScriptDocument.Blocks index, so ChapterInfo.BlockIndex
+    // can look up the on-screen element to jump to. _paragraphTextBlocks/_headingTextBlocks
+    // are the same elements split by kind, so FontSize/FontColor/FontFamily changes can be
+    // reapplied in bulk without a full re-render (avoids rebuilding every element on every
+    // slider tick while the user is dragging FontSize/Opacity, etc.).
+    private readonly List<FrameworkElement> _blockElements       = new();
+    private readonly List<TextBlock>        _paragraphTextBlocks = new();
+    private readonly List<TextBlock>        _headingTextBlocks   = new();
+
+    // How much bigger a heading's title text renders than the current body FontSize.
+    private const double HeadingFontSizeBoost = 6;
+    // LineHeight-to-FontSize ratio carried over from the original fixed 22/34 values.
+    private const double LineHeightRatio = 34.0 / 22.0;
+
     public OverlayWindow()
     {
         InitializeComponent();
@@ -29,13 +45,17 @@ public sealed partial class OverlayWindow : Window
             App.Config, App.Audio, App.Whisper, App.AiChat);
 
         // Wire ViewModel events → Win32 calls
-        ViewModel.ClickThroughChanged += OnClickThroughChanged;
+        ViewModel.ClickThroughChanged   += OnClickThroughChanged;
+        ViewModel.JumpToBlockRequested  += (_, blockIndex) => JumpToBlock(blockIndex);
+        // FollowUpSuggestions is an ObservableCollection, not a property — mirrors
+        // ScrollTabViewModel.Chapters' own CollectionChanged pattern in ControllerWindow.
+        ViewModel.FollowUpSuggestions.CollectionChanged += (_, _) => PopulateFollowUpSuggestions();
         ViewModel.PropertyChanged            += (_, e) =>
         {
             switch (e.PropertyName)
             {
                 case nameof(OverlayViewModel.CurrentMode):  OnCurrentModeChanged(ViewModel.CurrentMode); break;
-                case nameof(OverlayViewModel.ScriptText):   ScriptTextBlock.Text   = ViewModel.ScriptText; break;
+                case nameof(OverlayViewModel.ScriptDocument): RenderScriptDocument(ViewModel.ScriptDocument); break;
                 case nameof(OverlayViewModel.QaStatus):
                     QaStatusText.Text       = ViewModel.QaStatus;
                     QaStatusText.Visibility = string.IsNullOrEmpty(ViewModel.QaStatus) ? Visibility.Collapsed : Visibility.Visible;
@@ -60,13 +80,21 @@ public sealed partial class OverlayWindow : Window
                     ScriptScrollViewer.ScrollToVerticalOffset(ViewModel.ScrollOffset);
                     break;
                 case nameof(OverlayViewModel.FontColor):
-                    ScriptTextBlock.Foreground = ParseHexColor(ViewModel.FontColor);
+                    var colorBrush = ParseHexColor(ViewModel.FontColor);
+                    foreach (var tb in _paragraphTextBlocks) tb.Foreground = colorBrush;
                     break;
                 case nameof(OverlayViewModel.FontSize):
-                    ScriptTextBlock.FontSize = ViewModel.FontSize;
+                    foreach (var tb in _paragraphTextBlocks)
+                    {
+                        tb.FontSize   = ViewModel.FontSize;
+                        tb.LineHeight = ViewModel.FontSize * LineHeightRatio;
+                    }
+                    foreach (var tb in _headingTextBlocks) tb.FontSize = ViewModel.FontSize + HeadingFontSizeBoost;
                     break;
                 case nameof(OverlayViewModel.FontFamily):
-                    ScriptTextBlock.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(ViewModel.FontFamily);
+                    var family = new Microsoft.UI.Xaml.Media.FontFamily(ViewModel.FontFamily);
+                    foreach (var tb in _paragraphTextBlocks) tb.FontFamily = family;
+                    foreach (var tb in _headingTextBlocks)   tb.FontFamily = family;
                     break;
                 case nameof(OverlayViewModel.IsVoiceActive):
                     if (ViewModel.ScrollMode == ViewModels.ScrollMode.Voice)
@@ -86,11 +114,10 @@ public sealed partial class OverlayWindow : Window
             }
         };
 
-        // Seed initial text/appearance (persisted config values, may differ from XAML defaults)
-        ScriptTextBlock.Text       = ViewModel.ScriptText;
-        ScriptTextBlock.FontSize   = ViewModel.FontSize;
-        ScriptTextBlock.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(ViewModel.FontFamily);
-        ScriptTextBlock.Foreground = ParseHexColor(ViewModel.FontColor); // wasn't seeded before either — same gap, fixed while touching this block
+        // Seed initial rendering (persisted config values, may differ from XAML defaults) —
+        // ViewModel.ScriptDocument is already correctly parsed by the time the constructor
+        // reaches here (its field initializer parses the placeholder text directly).
+        RenderScriptDocument(ViewModel.ScriptDocument);
 
         Activated += OnFirstActivated;
     }
@@ -201,7 +228,158 @@ public sealed partial class OverlayWindow : Window
     private void UpdatePanelVisibility(OverlayMode mode)
     {
         ScriptScrollViewer.Visibility = mode == OverlayMode.Script ? Visibility.Visible : Visibility.Collapsed;
-        QaPanel.Visibility            = mode == OverlayMode.QA     ? Visibility.Visible : Visibility.Collapsed;
+        QaScrollViewer.Visibility     = mode == OverlayMode.QA     ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // ── Script rendering (blocks: paragraphs + chapter-heading dividers) ─────
+
+    /// <summary>
+    /// Rebuilds ScriptBlocksPanel from a freshly-parsed ScriptDocument — called whenever a new
+    /// script loads (ViewModel.ScriptDocument changes). One child element per block:
+    ///   - ParagraphBlock → a TextBlock with one Run per ScriptRun (Bold/Italic per-run), or a
+    ///     single-space placeholder for a blank source line (preserves vertical spacing).
+    ///   - HeadingBlock   → a thin accent-colored divider line + the chapter title, rendered
+    ///     larger/bolder — this is what naturally shows "you've crossed into a new chapter" as
+    ///     it scrolls through view, no separate state-tracking needed.
+    /// Also rebuilds _blockElements/_paragraphTextBlocks/_headingTextBlocks so later
+    /// FontSize/FontColor/FontFamily changes and chapter jumps (JumpToBlock) can find the
+    /// right elements without re-parsing.
+    /// </summary>
+    private void RenderScriptDocument(ScriptDocument document)
+    {
+        ScriptBlocksPanel.Children.Clear();
+        _blockElements.Clear();
+        _paragraphTextBlocks.Clear();
+        _headingTextBlocks.Clear();
+
+        var fontFamily = new Microsoft.UI.Xaml.Media.FontFamily(ViewModel.FontFamily);
+        var foreground = ParseHexColor(ViewModel.FontColor);
+
+        foreach (var block in document.Blocks)
+        {
+            FrameworkElement element;
+
+            switch (block)
+            {
+                case HeadingBlock heading:
+                {
+                    bool isTopLevel = heading.Level == 1;
+                    var divider = new Border
+                    {
+                        Height     = isTopLevel ? 2 : 1,
+                        Margin     = new Thickness(0, 18, 0, 6),
+                        Opacity    = isTopLevel ? 0.9 : 0.6,
+                        Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 120, 170, 255)),
+                    };
+                    var title = new TextBlock
+                    {
+                        Text        = heading.Title,
+                        FontSize    = ViewModel.FontSize + HeadingFontSizeBoost,
+                        FontFamily  = fontFamily,
+                        FontWeight  = Microsoft.UI.Text.FontWeights.SemiBold,
+                        Foreground  = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 150, 190, 255)),
+                        TextWrapping = TextWrapping.Wrap,
+                    };
+                    _headingTextBlocks.Add(title);
+
+                    var stack = new StackPanel { Margin = new Thickness(16, 0, 16, 0) };
+                    stack.Children.Add(divider);
+                    stack.Children.Add(title);
+                    element = stack;
+                    break;
+                }
+
+                case ParagraphBlock paragraph:
+                {
+                    var tb = new TextBlock
+                    {
+                        TextWrapping = TextWrapping.Wrap,
+                        FontSize     = ViewModel.FontSize,
+                        FontFamily   = fontFamily,
+                        Foreground   = foreground,
+                        LineHeight   = ViewModel.FontSize * LineHeightRatio,
+                        Margin       = new Thickness(16, 0, 16, 0),
+                        IsTextSelectionEnabled = false,
+                    };
+
+                    if (paragraph.Runs.Count == 0)
+                    {
+                        // Blank source line — a literal space keeps the line's height (and
+                        // hence the original text's vertical rhythm) without visible text.
+                        tb.Text = " ";
+                    }
+                    else
+                    {
+                        foreach (var run in paragraph.Runs)
+                        {
+                            var inlineRun = new Run { Text = run.Text };
+                            if (run.Bold)   inlineRun.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+                            if (run.Italic) inlineRun.FontStyle  = Windows.UI.Text.FontStyle.Italic;
+                            tb.Inlines.Add(inlineRun);
+                        }
+                    }
+
+                    _paragraphTextBlocks.Add(tb);
+                    element = tb;
+                    break;
+                }
+
+                default:
+                    continue; // unknown block type — skip defensively, never crash rendering
+            }
+
+            ScriptBlocksPanel.Children.Add(element);
+            _blockElements.Add(element);
+        }
+    }
+
+    /// <summary>
+    /// Scrolls the TP so the block at <paramref name="blockIndex"/> lands at the top of the
+    /// viewport — the View-side half of OverlayViewModel.JumpToBlock (chapter navigation from
+    /// the Controller). TransformToVisual against ScriptBlocksPanel (the ScrollViewer's
+    /// content) gives the target element's Y position in the SAME coordinate space
+    /// ScrollOffset/ScrollToVerticalOffset already operate in, so no separate scroll mechanism
+    /// is needed — this reuses the exact one Auto/Voice/manual scroll already use.
+    /// </summary>
+    private void JumpToBlock(int blockIndex)
+    {
+        if (blockIndex < 0 || blockIndex >= _blockElements.Count) return;
+
+        var target    = _blockElements[blockIndex];
+        var transform = target.TransformToVisual(ScriptBlocksPanel);
+        var point     = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+        ViewModel.ScrollOffset = Math.Max(0, point.Y);
+    }
+
+    /// <summary>Rebuilds the follow-up-suggestion text lines from
+    /// OverlayViewModel.FollowUpSuggestions — plain, non-interactive TextBlocks (deliberately
+    /// NOT buttons — see FollowUpSuggestions' own doc comment for why: the TP is frequently
+    /// click-through/locked during live use, and these are questions for the PRESENTER to ask
+    /// their client aloud, not something to click/activate). A small header line appears only
+    /// when there's at least one suggestion to show.</summary>
+    private void PopulateFollowUpSuggestions()
+    {
+        FollowUpSuggestionsPanel.Children.Clear();
+        if (ViewModel.FollowUpSuggestions.Count == 0) return;
+
+        FollowUpSuggestionsPanel.Children.Add(new TextBlock
+        {
+            Text       = "You could ask them:",
+            FontSize   = 13,
+            FontStyle  = Windows.UI.Text.FontStyle.Italic,
+            Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 144, 144, 160)), // matches QaQuestionText's muted tone
+        });
+
+        foreach (var suggestion in ViewModel.FollowUpSuggestions)
+        {
+            FollowUpSuggestionsPanel.Children.Add(new TextBlock
+            {
+                Text          = $"•  {suggestion}",
+                FontSize      = 14,
+                TextWrapping  = TextWrapping.Wrap,
+                Foreground    = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 144, 144, 160)),
+            });
+        }
     }
 
     // ── Hex color helper ─────────────────────────────────────────────────────

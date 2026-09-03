@@ -42,6 +42,40 @@ public class MistralConfig
     public string ChatModel { get; set; } = "mistral-small-latest";
 }
 
+/// <summary>Local/self-hosted LLM — any server exposing an OpenAI-compatible
+/// /v1/chat/completions endpoint (Ollama, LM Studio, llama.cpp's llama-server, LocalAI, etc.),
+/// on this machine OR another one on the local network. ONE config serves BOTH chat and
+/// transcription (mirrors exactly how OpenAiConfig/GroqConfig already carry both a ChatModel and
+/// a WhisperModel under one shared Key/base) — set <see cref="ChatModel"/>,
+/// <see cref="WhisperModel"/>, or both, depending on what your server actually supports. Ollama
+/// itself only does chat (no transcription); a server like LocalAI implements both
+/// /v1/chat/completions AND /v1/audio/transcriptions from the same base URL, so leaving
+/// WhisperModel blank simply means this provider is never offered/used for transcription.
+///
+/// Key is OPTIONAL: Ollama's own docs use a dummy value ("required but unused"), and many local
+/// setups have no auth at all — see AiChatService's empty-key handling (skips the Authorization
+/// header entirely rather than sending a malformed empty Bearer token).</summary>
+public class LocalConfig
+{
+    /// <summary>Base URL up to and including "/v1" — "/chat/completions" or
+    /// "/audio/transcriptions" is appended automatically depending on which role is being called
+    /// (mirrors how AzureConfig.Endpoint gets its own path suffix appended). Defaults to Ollama's
+    /// own default port; change the host to a LAN IP to reach a server running on another
+    /// machine (e.g. Ollama needs OLLAMA_HOST=0.0.0.0:... set on that machine first — see
+    /// README's "Local LLM" chapter). NOTE: this fixed-suffix convention means a server whose
+    /// transcription endpoint uses a non-standard path (e.g. whisper.cpp's own bundled server,
+    /// which uses "/inference" rather than "/audio/transcriptions") isn't supported here — this
+    /// targets the more standardized OpenAI-compatible server shape (Ollama, LM Studio, LocalAI,
+    /// llama-server) by design.</summary>
+    public string BaseUrl      { get; set; } = "http://localhost:11434/v1";
+    public string ChatModel    { get; set; } = "";
+    /// <summary>Leave blank if this server doesn't support transcription (e.g. plain Ollama) —
+    /// an empty value simply means "Local LM" is never a real option in the Transcription
+    /// provider dropdown's actual behavior, even though it can still be selected there.</summary>
+    public string WhisperModel { get; set; } = "";
+    public string Key          { get; set; } = "";
+}
+
 // ── Appearance / UI preferences ───────────────────────────────────────────────
 
 public class AppearanceConfig
@@ -81,6 +115,10 @@ public class AppConfig
     public AnthropicConfig Anthropic { get; set; } = new();
     public GeminiConfig   Gemini   { get; set; } = new();
     public MistralConfig  Mistral  { get; set; } = new();
+    /// <summary>Provider key "local" (both Chat AND Transcription dropdowns) — self-hosted
+    /// OpenAI-compatible server (Ollama, LM Studio, llama-server, LocalAI). One config, two
+    /// separate model-name fields — see LocalConfig's own doc comment.</summary>
+    public LocalConfig    Local    { get; set; } = new();
 
     // Audio capture
     public string AudioDeviceId          { get; set; } = "";
@@ -104,6 +142,33 @@ public class AppConfig
         "Respond in the same language as the question. Keep your answer clear and under 4 sentences.";
 
     public string PresentationContext { get; set; } = "";
+
+    /// <summary>Max tokens requested per chat completion — was a hardcoded 400 in AiChatService
+    /// before this became user-configurable. 400 kept as the default so upgrading users see no
+    /// behavior change.</summary>
+    public int MaxTokens { get; set; } = 400;
+
+    /// <summary>Whether to fetch 2-3 follow-up question suggestions after each successful Q&amp;A
+    /// answer (a separate, minimal AI call — no system prompt/presentation context/history — so
+    /// it never competes with or pollutes the main answer's context). Off by default: it's an
+    /// extra billed API call per question, opt-in rather than a surprise cost increase.</summary>
+    public bool ShowFollowUpSuggestions { get; set; } = false;
+
+    /// <summary>Free-text custom vocabulary/glossary — product names, jargon, acronyms, spellings
+    /// the presenter wants transcription and chat answers to get right (e.g. "Contoso, Northwind
+    /// Traders, SKU-4471"). Injected as-is into BOTH: (1) the Whisper transcription "prompt" bias
+    /// — a real, documented Whisper API parameter that nudges recognition toward specific
+    /// vocabulary/spelling — and (2) the chat system prompt, as a labeled "Glossary" section (see
+    /// AiChatService.BuildSystemText). Blank by default — completely inert until the user opts
+    /// in, same as PresentationContext.</summary>
+    public string Glossary { get; set; } = "";
+
+    /// <summary>Absolute paths to small reference documents (.txt/.md only) the presenter has
+    /// attached as a lightweight knowledge base — product spec sheets, FAQs, pricing, etc. See
+    /// KnowledgeBaseService for the search approach (deliberately keyword/TF-IDF relevance
+    /// scoring, NOT an embeddings/vector-DB pipeline — see that class's own doc comment for why).
+    /// Empty by default — completely inert until the user attaches at least one file.</summary>
+    public List<string> KnowledgeBaseFiles { get; set; } = new();
 
     // UI / appearance
     public AppearanceConfig Appearance { get; set; } = new();

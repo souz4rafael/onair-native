@@ -47,6 +47,7 @@ public sealed partial class ProviderConfigDialog : ContentDialog
         AnthropicFields.Visibility= Visibility.Collapsed;
         GeminiFields.Visibility   = Visibility.Collapsed;
         MistralFields.Visibility  = Visibility.Collapsed;
+        LocalFields.Visibility    = Visibility.Collapsed;
 
         switch (_providerKey)
         {
@@ -95,6 +96,15 @@ public sealed partial class ProviderConfigDialog : ContentDialog
                 MistralKey.Password    = mi.Key;
                 MistralChatModel.Text  = mi.ChatModel;
                 break;
+
+            case "local":
+                LocalFields.Visibility  = Visibility.Visible;
+                var lo = _config.Current.Local;
+                LocalBaseUrl.Text       = lo.BaseUrl;
+                LocalKey.Password       = lo.Key;
+                LocalWhisperModel.Text  = lo.WhisperModel;
+                LocalChatModel.Text     = lo.ChatModel;
+                break;
         }
     }
 
@@ -129,6 +139,13 @@ public sealed partial class ProviderConfigDialog : ContentDialog
                 break;
             case "mistral":
                 snapshot.Mistral = new MistralConfig { Key = MistralKey.Password };
+                break;
+            case "local":
+                snapshot.Local = new LocalConfig
+                {
+                    BaseUrl = LocalBaseUrl.Text.Trim(),
+                    Key     = LocalKey.Password,
+                };
                 break;
         }
         return snapshot;
@@ -182,6 +199,13 @@ public sealed partial class ProviderConfigDialog : ContentDialog
             case "mistral":
                 _config.Current.Mistral.Key       = MistralKey.Password;
                 _config.Current.Mistral.ChatModel = MistralChatModel.Text.Trim();
+                break;
+
+            case "local":
+                _config.Current.Local.BaseUrl      = LocalBaseUrl.Text.Trim();
+                _config.Current.Local.Key          = LocalKey.Password;
+                _config.Current.Local.WhisperModel = LocalWhisperModel.Text.Trim();
+                _config.Current.Local.ChatModel    = LocalChatModel.Text.Trim();
                 break;
         }
 

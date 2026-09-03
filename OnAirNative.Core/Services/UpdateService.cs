@@ -106,7 +106,9 @@ public sealed class UpdateService
             UseShellExecute = true,
         });
 
-    private static bool IsNewer(string current, string latest)
+    // internal (not private) + [InternalsVisibleTo] below so OnAirNative.Tests can unit-test
+    // this pure version-compare logic directly, without hitting the real GitHub API.
+    internal static bool IsNewer(string current, string latest)
     {
         if (!Version.TryParse(NormalizeForParse(current), out var currentV)) return false;
         if (!Version.TryParse(NormalizeForParse(latest),  out var latestV))  return false;
@@ -115,7 +117,7 @@ public sealed class UpdateService
 
     // Version.Parse needs at least Major.Minor — pads a bare "1" to "1.0", and
     // strips any pre-release suffix (e.g. "1.0.6-beta") that Version can't parse.
-    private static string NormalizeForParse(string v)
+    internal static string NormalizeForParse(string v)
     {
         var dash = v.IndexOf('-');
         if (dash >= 0) v = v[..dash];

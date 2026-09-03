@@ -2,6 +2,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using System.Collections.ObjectModel;
+using OnAirNative.Models;
 using OnAirNative.Services;
 
 namespace OnAirNative.ViewModels;
@@ -32,15 +34,130 @@ public partial class OverlayViewModel : ObservableObject
     [ObservableProperty] private bool        _isMoveModeActive = true;
     [ObservableProperty] private bool        _isClickThrough   = false;
 
-    [ObservableProperty] private string _scriptText     = "Load a script to begin.\n\nUse Ctrl+Alt+O or drag a .txt file here.";
+    private const string DefaultScriptPlaceholder = "Load a script to begin.\n\nUse Ctrl+Alt+O or drag a .txt file here.";
+
+    [ObservableProperty] private string _scriptText     = DefaultScriptPlaceholder;
     [ObservableProperty] private string _loadedFileName = "";
     [ObservableProperty] private double _scrollOffset   = 0;
+
+    // Parsed representation of ScriptText (blocks + chapter headings) — recomputed by
+    // OnScriptTextChanged below every time ScriptText changes. Field initializer parses the
+    // SAME placeholder constant directly (rather than relying on OnScriptTextChanged firing
+    // for it) because C# field initializers bypass generated property setters, so
+    // OnScriptTextChanged never actually runs for this default value.
+    [ObservableProperty] private ScriptDocument _scriptDocument = ScriptParser.Parse(DefaultScriptPlaceholder);
 
     [ObservableProperty] private bool   _isRecording  = false;
     [ObservableProperty] private bool   _isBusy       = false;
     [ObservableProperty] private string _qaQuestion   = "";
     [ObservableProperty] private string _qaAnswer     = "";
     [ObservableProperty] private string _qaStatus     = "";
+
+    // Block 5 pacing coach — words-per-minute estimate for the most recently completed
+    // recording, using VoiceActivityDetector to measure actual speaking time (excluding
+    // silence/pauses). Presenter-facing only (Controller Q&A tab), never shown on the TP — see
+    // PacingAnalyzer's own doc comment for the full reasoning. Always computed (no separate
+    // opt-in toggle needed): it costs nothing beyond a bit of local CPU crunching on bytes
+    // already in memory, unlike follow-up suggestions' real extra AI-call cost.
+    [ObservableProperty] private string _pacingSummary = "No pacing data yet.";
+
+    // Conversation memory across consecutive Q&A recordings — each successful answer appends
+    // a turn here, and it's passed back into every subsequent GetAnswerAsync call so follow-up
+    // questions ("and what about pricing?") resolve correctly instead of being answered in
+    // isolation. Deliberately NOT rendered on the TP (an earlier version showed a collapsed
+    // history of prior questions there — the user found it cluttered the screen and asked for
+    // it to be removed; the TP now only ever shows the CURRENT question/answer, same as before
+    // this whole side-experiment). ObservableCollection (not a plain List) purely so
+    // ConversationTurnCount below can stay a simple computed property backed by .Count — nothing
+    // currently reacts to CollectionChanged on this specific collection. Capped at
+    // MaxConversationTurns to bound token cost on a long-running stream; oldest turn drops first
+    // once the cap is hit (simple FIFO, no smarter summarization).
+    public ObservableCollection<ChatTurn> ConversationTurns { get; } = [];
+    private const int MaxConversationTurns = 6;
+
+    /// <summary>How many Q&amp;A turns are currently remembered — surfaced so the Controller can
+    /// show e.g. "3 turns remembered" next to the Clear Conversation button.</summary>
+    public int ConversationTurnCount => ConversationTurns.Count;
+
+    /// <summary>Forgets all prior Q&amp;A turns — the next question starts a fresh context. Does
+    /// NOT clear whatever's currently shown on the TP (QaQuestion/QaAnswer); those are a
+    /// separate concern (what's currently displayed vs. what the AI remembers).</summary>
+    [RelayCommand]
+    public void ClearConversation()
+    {
+        ConversationTurns.Clear();
+        OnPropertyChanged(nameof(ConversationTurnCount));
+    }
+    // ── Follow-up question suggestions (Block 2) ─────────────────────────────
+    // Populated after a successful answer, only when AppConfig.ShowFollowUpSuggestions is on
+    // (see AskAndAnswerAsync). An ObservableCollection so OverlayWindow can react to
+    // CollectionChanged the same way ScrollTabViewModel.Chapters already does for the chapter
+    // list — no separate "has suggestions" bool needed, an empty collection IS "none to show".
+    //
+    //
+    // These are questions the PRESENTER can ask THEIR CLIENT next, to keep the conversation
+    // flowing (a sales/conversation-flow aid — see AiChatService.GetFollowUpSuggestionsAsync's
+    // doc comment). Deliberately NOT clickable/actionable — rendered as plain text on the TP
+    // (see OverlayWindow.PopulateFollowUpSuggestions): the TP is frequently click-through/locked
+    // during live use, and the presenter reads/says these aloud themselves — there's nothing to
+    // "activate" (an earlier version of this feature wrongly made these clickable buttons that
+    // asked the AI the suggested question, which was backwards on both counts).
+    public ObservableCollection<string> FollowUpSuggestions { get; } = [];
+
+    // ── Q&A session recording (Block 2) ──────────────────────────────────────
+    // See QaSessionService's own doc comment for the full design rationale (never automatic,
+    // always a brand-new file, no in-app history/browser).
+    private readonly QaSessionService _qaSession = new();
+
+    // ── Knowledge base (Block 3) ─────────────────────────────────────────────
+    // See KnowledgeBaseService's own doc comment for the search approach. Stateless w.r.t.
+    // config (reads cfg.KnowledgeBaseFiles fresh on every call, same as AiChatService reads cfg
+    // fresh) — only caches file CONTENT internally, so it's safe to keep one long-lived instance
+    // here for the whole overlay's lifetime.
+    private readonly KnowledgeBaseService _knowledgeBase = new();
+
+    /// <summary>Whether a Q&amp;A session is currently recording — lets the Controller
+    /// enable/disable the "Close session" button appropriately (nothing to close when no
+    /// session is active).</summary>
+    public bool IsQaSessionActive => _qaSession.IsActive;
+
+    /// <summary>Human-readable status for the Controller's Q&amp;A session card.</summary>
+    public string QaSessionStatusText => _qaSession.IsActive
+        ? $"Recording to: {_qaSession.CurrentFileName} ({_qaSession.TurnCount} turn{(_qaSession.TurnCount == 1 ? "" : "s")})"
+        : "No active session.";
+
+    /// <summary>Where session .md files live — the Controller's "Open sessions folder" button
+    /// reads this rather than duplicating the path logic.</summary>
+    public string QaSessionsFolderPath => _qaSession.SessionsDirectory;
+
+    /// <summary>Starts a brand-new Q&amp;A session — always a fresh file, and (per explicit user
+    /// decision: "another conversation/session, another client — nothing can be inherited from
+    /// the previous one") also clears the Block 1 conversation memory, so the AI starts with a
+    /// completely clean slate exactly when the session does.</summary>
+    [RelayCommand]
+    public void StartNewQaSession(string? label)
+    {
+        _qaSession.StartNewSession(label);
+        ClearConversation();
+        OnPropertyChanged(nameof(QaSessionStatusText));
+        OnPropertyChanged(nameof(IsQaSessionActive));
+    }
+
+    /// <summary>Ends the active Q&amp;A session (if any) WITHOUT starting a new one — the only
+    /// way to stop recording besides immediately starting a different session (there was
+    /// previously no way to just "stop" — the user had to either start a new session or close
+    /// the whole app). The already-written file needs no special finalization (every turn was
+    /// flushed to disk as it happened) — this just detaches further turns from being appended.
+    /// Deliberately does NOT clear the Block 1 conversation memory (unlike StartNewQaSession) —
+    /// closing a session doesn't imply the presenter wants to lose AI context mid-conversation,
+    /// only that they've stopped recording it to a file.</summary>
+    [RelayCommand]
+    public void CloseQaSession()
+    {
+        _qaSession.CloseSession();
+        OnPropertyChanged(nameof(QaSessionStatusText));
+        OnPropertyChanged(nameof(IsQaSessionActive));
+    }
 
     // Rolling, best-effort transcript shown live *while* recording — only active when a
     // local Whisper model is loaded (re-transcribing on a timer against a cloud API would
@@ -144,8 +261,18 @@ public partial class OverlayViewModel : ObservableObject
 
     private DispatcherTimer? _voiceTimer;
 
+    // Block 5: real VAD (attack/release hysteresis) replacing a naive rms > threshold compare —
+    // see VoiceActivityDetector's own doc comment for why. One long-lived instance for the
+    // overlay's whole lifetime, explicitly Reset() at the start of each voice-scroll session so
+    // stale hysteresis state from a previous session never leaks into a new one.
+    private readonly VoiceActivityDetector _voiceVad = new();
+    private long? _lastVoiceRmsTickMs;
+
     private void StartVoiceScroll()
     {
+        _voiceVad.Reset();
+        _lastVoiceRmsTickMs = null;
+
         _voiceTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(50),
@@ -179,7 +306,16 @@ public partial class OverlayViewModel : ObservableObject
     private void OnVoiceRms(float rms)
     {
         var threshold = (float)_config.Current.Appearance.VoiceRmsThreshold;
-        bool active   = rms > threshold;
+
+        // Audio device callbacks don't arrive on a fixed schedule (buffer size varies by
+        // device/driver), so measure the REAL elapsed time between callbacks rather than
+        // assuming a fixed tick rate — VoiceActivityDetector's attack/release durations are
+        // only meaningful against real wall-clock time.
+        var nowMs = Environment.TickCount64;
+        var elapsedMs = _lastVoiceRmsTickMs is null ? 30 : Math.Max(1, nowMs - _lastVoiceRmsTickMs.Value);
+        _lastVoiceRmsTickMs = nowMs;
+
+        bool active = _voiceVad.Process(rms, threshold, elapsedMs);
 
         if (active != IsVoiceActive || MicLevel != Math.Round(rms, 1))
             _uiQueue.TryEnqueue(() => { IsVoiceActive = active; MicLevel = Math.Round(rms, 1); });
@@ -302,10 +438,24 @@ public partial class OverlayViewModel : ObservableObject
         if (file is not null) await LoadScriptAsync(file.Path);
     }
 
+    // Re-parses into ScriptDocument every time the raw text changes (new file loaded, remote
+    // "set script text", etc.) — ScriptText itself stays the single source of truth (also
+    // what MCP/Stream Deck see), ScriptDocument is purely a derived, recomputed view of it.
+    partial void OnScriptTextChanged(string value) => ScriptDocument = ScriptParser.Parse(value);
+
     // ── Scroll ────────────────────────────────────────────────────────────────
 
     public void Scroll(int delta) =>
         ScrollOffset = Math.Max(0, ScrollOffset + delta);
+
+    /// <summary>Requests the View scroll so the block at <paramref name="blockIndex"/> (an
+    /// index into ScriptDocument.Blocks — see ChapterInfo.BlockIndex) becomes visible at the
+    /// top of the TP. The View (OverlayWindow) owns the actual pixel-position computation
+    /// since only it has the rendered UIElements; this just relays the request, the same
+    /// pattern already used for ClickThroughChanged/OpacityChanged (View-only concerns).</summary>
+    public event EventHandler<int>? JumpToBlockRequested;
+
+    public void JumpToBlock(int blockIndex) => JumpToBlockRequested?.Invoke(this, blockIndex);
 
     // ── Q&A / Recording (Ctrl+Alt+R) ─────────────────────────────────────────
 
@@ -332,11 +482,8 @@ public partial class OverlayViewModel : ObservableObject
 
             QaQuestion = tx.Text;
             QaStatus   = "Getting answer…";
-
-            var ans = await _ai.GetAnswerAsync(tx.Text, _config.Current);
-            QaAnswer = ans.Success ? ans.Text : $"Error: {ans.Error}";
-            QaStatus = ans.Success ? "" : "AI call failed";
-            IsBusy   = false;
+            UpdatePacingSummary(wavData, tx.Text);
+            await AskAndAnswerAsync(tx.Text);
         }
         else
         {
@@ -351,12 +498,63 @@ public partial class OverlayViewModel : ObservableObject
             CurrentMode = OverlayMode.QA;
             QaQuestion  = "";
             QaAnswer    = "";
+            FollowUpSuggestions.Clear();
             QaStatus    = "Recording… (Ctrl+Alt+R to stop)";
             IsRecording = true;
             await _audio.StartRecordingAsync(_config.Current.AudioRecordingSource,
                 _config.Current.AudioDeviceId, _config.Current.AudioOutputDeviceId);
             StartLivePreview();
         }
+    }
+
+    /// <summary>Computes and updates the Block 5 pacing-coach summary for the recording that was
+    /// just transcribed — see PacingAnalyzer's own doc comment for the full approach/reasoning.
+    /// A null result (not enough words/speaking time, or an unparseable clip) shows a neutral
+    /// message rather than a wrong or misleading number.</summary>
+    private void UpdatePacingSummary(byte[] wavData, string transcriptText)
+    {
+        var threshold = (float)_config.Current.Appearance.VoiceRmsThreshold;
+        var pacing = PacingAnalyzer.Analyze(wavData, transcriptText, threshold);
+        PacingSummary = pacing is null
+            ? "Not enough data for a pace estimate."
+            : $"{pacing.WordsPerMinute:F0} words/min — {pacing.Feedback} ({pacing.WordCount} words over {pacing.SpeakingSeconds:F0}s of speech)";
+    }
+
+    /// <summary>Shared "call the AI, update state" tail for a completed Q&amp;A turn — extracted
+    /// from ToggleRecordingAsync's stop-branch for clarity. Updates the Block 1 conversation
+    /// memory (used only for AI context, NOT rendered on the TP — see ConversationTurns' own
+    /// doc comment for why), appends to the active Q&amp;A session file (if any, via
+    /// QaSessionService — a no-op when no session is active), and — if enabled — fetches
+    /// follow-up suggestions (plain informational text on the TP, not an interactive action) for
+    /// the next round.</summary>
+    private async Task AskAndAnswerAsync(string question)
+    {
+        var cfg = _config.Current;
+        var kbContext = _knowledgeBase.BuildContextForQuestion(question, cfg);
+        var ans = await _ai.GetAnswerAsync(question, cfg, ConversationTurns, kbContext);
+        QaAnswer = ans.Success ? ans.Text : $"Error: {ans.Error}";
+        QaStatus = ans.Success ? "" : "AI call failed";
+        IsBusy   = false;
+
+        if (!ans.Success) return;
+
+        ConversationTurns.Add(new ChatTurn(question, ans.Text));
+        while (ConversationTurns.Count > MaxConversationTurns)
+            ConversationTurns.RemoveAt(0);
+        OnPropertyChanged(nameof(ConversationTurnCount));
+
+        _qaSession.AppendTurn(question, ans.Text);
+        OnPropertyChanged(nameof(QaSessionStatusText));
+
+        if (_config.Current.ShowFollowUpSuggestions)
+            await FetchFollowUpSuggestionsAsync(question, ans.Text);
+    }
+
+    private async Task FetchFollowUpSuggestionsAsync(string question, string answer)
+    {
+        var suggestions = await _ai.GetFollowUpSuggestionsAsync(question, answer, _config.Current);
+        FollowUpSuggestions.Clear();
+        foreach (var s in suggestions) FollowUpSuggestions.Add(s);
     }
 
     // ── Appearance sync from Controller ──────────────────────────────────────

@@ -86,6 +86,26 @@
                 <TextBox x:Name="MistralChatModel" PlaceholderText="mistral-small-latest"/>
             </StackPanel>
 
+            <!-- ─── Local LM fields ───────────────────────────────────── -->
+            <!-- Self-hosted OpenAI-compatible server — Ollama, LM Studio, llama-server, LocalAI.
+                 ONE config for BOTH chat and transcription (set whichever model fields your
+                 server actually supports — Ollama itself only does chat, so leave Whisper model
+                 blank in that case). Base URL up to and including "/v1" (mirrors AzureEndpoint's
+                 own "just the base, path appended automatically" convention); change the host to
+                 a LAN IP to reach a server on another machine (e.g. Ollama needs
+                 OLLAMA_HOST=0.0.0.0:11434 set on that machine first — see README). API key is
+                 OPTIONAL: most local servers have no auth at all. -->
+            <StackPanel x:Name="LocalFields" Spacing="8" Visibility="Collapsed">
+                <TextBlock Text="Server base URL" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="LocalBaseUrl" PlaceholderText="http://localhost:11434/v1"/>
+                <TextBlock Text="API Key (optional — most local servers need none)" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <PasswordBox x:Name="LocalKey" PlaceholderText="leave blank if the server has no auth"/>
+                <TextBlock Text="Whisper model (leave blank if this server has no transcription)" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="LocalWhisperModel" PlaceholderText="whisper-1"/>
+                <TextBlock Text="Chat model" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                <TextBox x:Name="LocalChatModel" PlaceholderText="llama3.2"/>
+            </StackPanel>
+
         </StackPanel>
     </ScrollViewer>
 </ContentDialog>

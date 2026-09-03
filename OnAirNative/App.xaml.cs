@@ -60,7 +60,10 @@ public partial class App : Application
             File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} UnhandledException: {e.ExceptionObject}\n");
 
         // Init services
-        Config  = new ConfigService();
+        // ONAIR_CONFIG_DIR lets OnAirNative.IntegrationTests point config.json at an isolated
+        // temp directory instead of the real %LocalAppData%\onAIr\ — unset in every normal
+        // launch (dev, installed, Store), so behavior is completely unchanged for real users.
+        Config  = new ConfigService(Environment.GetEnvironmentVariable("ONAIR_CONFIG_DIR"));
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} ConfigService OK\n");
         Audio   = new AudioService();
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} AudioService OK\n");

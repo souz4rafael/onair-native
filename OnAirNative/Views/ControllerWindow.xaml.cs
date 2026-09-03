@@ -152,6 +152,10 @@ public sealed partial class ControllerWindow : Window
                 WhisperModelStatusText.Text = ViewModel.AiTab.WhisperModelStatus;
                 WhisperLoadUnloadBtn.Content = App.Whisper.IsLocalModelLoaded ? "Unload" : "Load";
             }
+            else if (e.PropertyName == nameof(ViewModels.AiTabViewModel.UsageSummary))
+            {
+                UsageSummaryText.Text = ViewModel.AiTab.UsageSummary;
+            }
         };
 
         // Update check/install status → About tab UI
@@ -173,6 +177,14 @@ public sealed partial class ControllerWindow : Window
                 FileNameText.Text = ViewModel.ScrollTab.LoadedFileName;
         };
 
+        // Rebuild the clickable chapter list whenever a newly loaded script's headings change
+        // (ScrollTabViewModel.Chapters is an ObservableCollection, not a property — see its
+        // doc comment — so we react to CollectionChanged rather than PropertyChanged here).
+        ViewModel.ScrollTab.Chapters.CollectionChanged += (_, _) => PopulateChapters();
+
+        // Same pattern for the Settings → KNOWLEDGE BASE file list.
+        ViewModel.AiTab.KnowledgeBaseFiles.CollectionChanged += (_, _) => PopulateKnowledgeBaseFiles();
+
         // Sync LockToggle when move mode changes (e.g., via Ctrl+Alt+Home hotkey).
         // Setting IsChecked (not just calling SyncLockToggle) keeps the button's actual
         // toggle state in sync with its label — otherwise a hotkey-driven change would
@@ -182,6 +194,12 @@ public sealed partial class ControllerWindow : Window
         {
             if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.IsMoveModeActive))
                 LockToggle.IsChecked = !Overlay.ViewModel.IsMoveModeActive;
+            else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.ConversationTurnCount))
+                UpdateConversationTurnCountText();
+            else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.QaSessionStatusText))
+                UpdateQaSessionStatusText();
+            else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.PacingSummary))
+                PacingSummaryText.Text = Overlay.ViewModel.PacingSummary;
         };
 
         PopulateStaticUi();
@@ -201,9 +219,20 @@ public sealed partial class ControllerWindow : Window
 
             SystemPromptBox.Text        = ViewModel.AiTab.SystemPrompt;
             PresentationContextBox.Text = ViewModel.AiTab.PresentationContext;
+            GlossaryBox.Text            = ViewModel.AiTab.Glossary;
             WhisperModelBox.Text        = ViewModel.AiTab.WhisperModelPath;
             WhisperModelStatusText.Text = ViewModel.AiTab.WhisperModelStatus;
             WhisperLoadUnloadBtn.Content = App.Whisper.IsLocalModelLoaded ? "Unload" : "Load";
+            PopulateKnowledgeBaseFiles();
+
+            MaxTokensSlider.Minimum = 50;
+            MaxTokensSlider.Maximum = 2000;
+            MaxTokensSlider.Value   = ViewModel.AiTab.MaxTokens;
+            ShowFollowUpSuggestionsCheckBox.IsChecked = ViewModel.AiTab.ShowFollowUpSuggestions;
+            UsageSummaryText.Text   = ViewModel.AiTab.UsageSummary;
+            UpdateConversationTurnCountText();
+            UpdateQaSessionStatusText();
+            PacingSummaryText.Text  = Overlay?.ViewModel.PacingSummary ?? "No pacing data yet.";
 
             // Scroll tab — set ranges THEN values.
             // Must be inside _populatingUi guard: setting Minimum causes WinUI 3 to clamp
@@ -228,6 +257,7 @@ public sealed partial class ControllerWindow : Window
             PopulateFontFamilies();
 
             FileNameText.Text = ViewModel.ScrollTab.LoadedFileName;
+            PopulateChapters();
             CustomColorBox.Text = App.Config.Current.Appearance.FontColor;
 
             // About
@@ -416,6 +446,89 @@ public sealed partial class ControllerWindow : Window
 
     private void LoadFile_Click(object sender, RoutedEventArgs e) =>
         _ = ViewModel.ScrollTab.OpenFileCommand.ExecuteAsync(this);
+
+    /// <summary>Rebuilds the clickable CHAPTERS card from ScrollTabViewModel.Chapters — plain
+    /// Buttons built in code-behind (same "manually populate a StackPanel" pattern as e.g.
+    /// McpToolsDialog's tools checklist) rather than an ItemsControl/data template, matching
+    /// how the rest of this codebase builds small dynamic lists. Hides the whole card when the
+    /// loaded script has no headings, so a plain script doesn't show an empty panel.</summary>
+    private void PopulateChapters()
+    {
+        ChaptersListPanel.Children.Clear();
+        var chapters = ViewModel.ScrollTab.Chapters;
+        ChaptersCard.Visibility = chapters.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        foreach (var chapter in chapters)
+        {
+            var button = new Button
+            {
+                Content    = chapter.Title,
+                HorizontalAlignment        = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                // Indent Level-2 (##) chapters under Level-1 (#) ones
+                Padding    = new Thickness(chapter.Level == 1 ? 10 : 24, 6, 10, 6),
+                FontWeight = chapter.Level == 1
+                    ? Microsoft.UI.Text.FontWeights.SemiBold
+                    : Microsoft.UI.Text.FontWeights.Normal,
+            };
+            button.Click += (_, _) => ViewModel.ScrollTab.JumpToChapterCommand.Execute(chapter);
+            ChaptersListPanel.Children.Add(button);
+        }
+    }
+
+    /// <summary>Rebuilds the Settings → KNOWLEDGE BASE file list from AiTabViewModel.
+    /// KnowledgeBaseFiles — same "manually populate a StackPanel in code-behind" pattern as
+    /// PopulateChapters above. Unlike CHAPTERS, this card never collapses entirely when empty:
+    /// it's a persistent setup card (holds the "+ Add file(s)…" button, the only way to attach
+    /// files), not a contextual display that only makes sense once content exists — so an empty
+    /// state shows an explanatory message instead of hiding the card.</summary>
+    private void PopulateKnowledgeBaseFiles()
+    {
+        KnowledgeBaseFilesPanel.Children.Clear();
+        var files = ViewModel.AiTab.KnowledgeBaseFiles;
+        KnowledgeBaseEmptyText.Visibility = files.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+
+        foreach (var path in files)
+        {
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var nameText = new TextBlock
+            {
+                Text = Path.GetFileName(path),
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
+            ToolTipService.SetToolTip(nameText, path);
+            Grid.SetColumn(nameText, 0);
+
+            var removeBtn = new Button
+            {
+                Content = "✕",
+                FontSize = 12,
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin  = new Thickness(8, 0, 0, 0),
+            };
+            removeBtn.Click += (_, _) => ViewModel.AiTab.RemoveKnowledgeBaseFileCommand.Execute(path);
+            Grid.SetColumn(removeBtn, 1);
+
+            row.Children.Add(nameText);
+            row.Children.Add(removeBtn);
+            KnowledgeBaseFilesPanel.Children.Add(row);
+        }
+    }
+
+    private async void AddKnowledgeBaseFile_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new Windows.Storage.Pickers.FileOpenPicker();
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, _hwnd);
+        picker.FileTypeFilter.Add(".txt");
+        picker.FileTypeFilter.Add(".md");
+        var files = await picker.PickMultipleFilesAsync();
+        foreach (var file in files)
+            ViewModel.AiTab.AddKnowledgeBaseFileCommand.Execute(file.Path);
+    }
 
     private void ScrollUp_Click(object sender, RoutedEventArgs e) =>
         ViewModel.ScrollTab.ScrollUpCommand.Execute(null);
@@ -848,6 +961,71 @@ public sealed partial class ControllerWindow : Window
     private void PresentationContextBox_TextChanged(object sender, TextChangedEventArgs e) =>
         ViewModel.AiTab.PresentationContext = PresentationContextBox.Text;
 
+    private void GlossaryBox_TextChanged(object sender, TextChangedEventArgs e) =>
+        ViewModel.AiTab.Glossary = GlossaryBox.Text;
+
+    private void MaxTokensSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (_populatingUi) return;
+        ViewModel.AiTab.MaxTokens = (int)e.NewValue;
+    }
+
+    private void ShowFollowUpSuggestionsCheckBox_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_populatingUi) return;
+        ViewModel.AiTab.ShowFollowUpSuggestions = ShowFollowUpSuggestionsCheckBox.IsChecked == true;
+    }
+
+    private void ResetUsage_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.AiTab.ResetUsageCommand.Execute(null);
+
+    private void ClearConversation_Click(object sender, RoutedEventArgs e) =>
+        Overlay?.ViewModel.ClearConversationCommand.Execute(null);
+
+    private void UpdateConversationTurnCountText()
+    {
+        var count = Overlay?.ViewModel.ConversationTurnCount ?? 0;
+        ConversationTurnCountText.Text = count == 0
+            ? "No turns remembered yet."
+            : $"{count} turn{(count == 1 ? "" : "s")} remembered.";
+    }
+
+    /// <summary>Starts a brand-new Q&amp;A session (always a fresh file — see
+    /// OverlayViewModel.StartNewQaSession's doc comment) using whatever optional label is
+    /// currently typed in QaSessionLabelBox, then clears that box for the next time.</summary>
+    private void StartNewQaSession_Click(object sender, RoutedEventArgs e)
+    {
+        var label = string.IsNullOrWhiteSpace(QaSessionLabelBox.Text) ? null : QaSessionLabelBox.Text;
+        Overlay?.ViewModel.StartNewQaSessionCommand.Execute(label);
+        QaSessionLabelBox.Text = "";
+        UpdateQaSessionStatusText();
+    }
+
+    /// <summary>Ends the active Q&amp;A session without starting a new one — the only other way
+    /// to stop recording besides the user closing the whole app.</summary>
+    private void CloseQaSession_Click(object sender, RoutedEventArgs e)
+    {
+        Overlay?.ViewModel.CloseQaSessionCommand.Execute(null);
+        UpdateQaSessionStatusText();
+    }
+
+    /// <summary>Opens the Q&amp;A sessions folder in Explorer — deliberately no in-app file
+    /// browser/viewer (per explicit user decision). Creates the folder first if no session has
+    /// ever been started yet, so this never fails with a "path not found" error.</summary>
+    private void OpenQaSessionsFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (Overlay is null) return;
+        var path = Overlay.ViewModel.QaSessionsFolderPath;
+        Directory.CreateDirectory(path);
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+    }
+
+    private void UpdateQaSessionStatusText()
+    {
+        QaSessionStatusText.Text = Overlay?.ViewModel.QaSessionStatusText ?? "No active session.";
+        CloseQaSessionBtn.IsEnabled = Overlay?.ViewModel.IsQaSessionActive ?? false;
+    }
+
     private void WhisperModelBox_TextChanged(object sender, TextChangedEventArgs e) =>
         ViewModel.AiTab.WhisperModelPath = WhisperModelBox.Text;
 
@@ -1116,6 +1294,12 @@ public sealed partial class ControllerWindow : Window
         AnthropicProviderStatus.Text = ProviderStatusText(!string.IsNullOrEmpty(App.Config.Current.Anthropic.Key));
         GeminiProviderStatus.Text    = ProviderStatusText(!string.IsNullOrEmpty(App.Config.Current.Gemini.Key));
         MistralProviderStatus.Text   = ProviderStatusText(!string.IsNullOrEmpty(App.Config.Current.Mistral.Key));
+        // No key required for Local LM (most self-hosted servers have no auth) — "configured"
+        // means the user has pointed it at a real base URL AND named at least one model (chat
+        // or Whisper — one config now optionally serves both roles).
+        var loc = App.Config.Current.Local;
+        LocalProviderStatus.Text     = ProviderStatusText(!string.IsNullOrEmpty(loc.BaseUrl) &&
+            (!string.IsNullOrEmpty(loc.ChatModel) || !string.IsNullOrEmpty(loc.WhisperModel)));
     }
 
     private static string ProviderStatusText(bool configured) =>

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Pure, WinUI-free logic extracted from OnAirNative so it can be unit-tested directly.
+    Deliberately plain net8.0 (no "-windows10.0.19041.0" suffix, no UseWinUI, no
+    Microsoft.WindowsAppSDK) — that Windows-flavored TFM combination is what drags the
+    MSIX/MrtCore PRI-generation build tooling into ANY project that references it (including
+    a plain test project), which fails outside a full WinUI/UWP SDK install. Everything in
+    this project only ever runs on Windows in practice (the app itself is Windows-only), but
+    nothing here actually NEEDS WinUI/XAML to compile or run, so it doesn't declare that
+    dependency.
+
+    Contains: script parsing (ScriptParser/ScriptDocument), config load/save
+    (ConfigService/AppConfig), DPAPI secret-at-rest encryption (SecretProtector), AI chat
+    provider routing (AiChatService), and update-check version comparison (UpdateService).
+    OnAirNative.csproj (the WinUI app) references this project; OnAirNative.Tests references
+    ONLY this project, never the WinUI app itself.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>OnAirNative</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- DPAPI secret-at-rest encryption for API keys (ProtectedData) — used by
+         SecretProtector.cs. Works fine referenced from a plain net8.0 TFM; only throws at
+         runtime if actually called on a non-Windows OS, which never happens here. -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

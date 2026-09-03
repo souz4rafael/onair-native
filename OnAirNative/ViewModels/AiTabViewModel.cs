@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.Collections.ObjectModel;
 using OnAirNative.Models;
 using OnAirNative.Services;
 
@@ -21,6 +22,31 @@ public partial class AiTabViewModel : ObservableObject
     [ObservableProperty] private string _presentationContext;
     [ObservableProperty] private string _whisperModelPath;
 
+    // Max tokens requested per chat completion — was a hardcoded 400 in AiChatService, now
+    // user-configurable (Slider in the PROMPTS card, 50-2000).
+    [ObservableProperty] private int _maxTokens;
+
+    // Running token-usage summary, refreshed whenever AiChatService.UsageChanged fires (i.e.
+    // after every successful chat call, and after a manual reset). Text, not raw numbers,
+    // since the Controller UI just needs to display it — no $ estimate (see AiChatService's
+    // usage-tracking doc comment for why).
+    [ObservableProperty] private string _usageSummary = "No calls yet this session.";
+
+    // "Show follow-up question suggestions" toggle (Block 2) — off by default since it's an
+    // extra billed API call per question, not something that should surprise a user's bill.
+    [ObservableProperty] private bool _showFollowUpSuggestions;
+
+    // Custom vocabulary/glossary (Block 3) — free text, injected into BOTH the Whisper
+    // transcription prompt and the chat system prompt (see AppConfig.Glossary's own doc
+    // comment). Blank by default, same opt-in pattern as PresentationContext.
+    [ObservableProperty] private string _glossary = "";
+
+    // Reference documents attached as a lightweight knowledge base (Block 3) — full paths,
+    // display-only here (filenames shown in the UI; see ControllerWindow.PopulateKnowledgeBaseFiles).
+    // An ObservableCollection so the Settings card can react to Add/Remove without a manual
+    // refresh call, same pattern as OverlayViewModel.ConversationTurns/FollowUpSuggestions.
+    public ObservableCollection<string> KnowledgeBaseFiles { get; } = [];
+
     // Feedback for the local Whisper model load triggered by WhisperModelPath below —
     // "", "Loading model…", "✓ Model loaded", "⚠ File not found", or "⚠ Failed to load model".
     [ObservableProperty] private string _whisperModelStatus = "";
@@ -35,10 +61,18 @@ public partial class AiTabViewModel : ObservableObject
     // MODEL) only controls availability, this controls actual use.
     [ObservableProperty] private bool _useLocalWhisper;
 
-    public static readonly string[] ChatProviders          = ["Azure OpenAI", "OpenAI", "Groq", "Anthropic", "Google Gemini", "Mistral"];
-    public static readonly string[] ProviderKeys           = ["azure", "openai", "groq", "anthropic", "gemini", "mistral"];
-    public static readonly string[] TranscriptionProviders = ["OpenAI (Whisper)", "Groq (Whisper)", "Azure (Whisper)"];
-    public static readonly string[] TranscriptionKeys      = ["openai", "groq", "azure"];
+    public static readonly string[] ChatProviders          = ["Azure OpenAI", "OpenAI", "Groq", "Anthropic", "Google Gemini", "Mistral", "Local LM"];
+    public static readonly string[] ProviderKeys           = ["azure", "openai", "groq", "anthropic", "gemini", "mistral", "local"];
+    public static readonly string[] TranscriptionProviders = ["OpenAI (Whisper)", "Groq (Whisper)", "Azure (Whisper)", "Local LM"];
+    // "local" here is the SAME key/config as chat's "local" (AppConfig.Local) — one unified
+    // server config now covers both roles (ChatModel + WhisperModel fields), mirroring exactly
+    // how openai/groq/azure already legitimately serve both roles from one account. This means
+    // Chat="Local LM" + Transcription="Local LM" now correctly means "the same server", which is
+    // why TestConnectionAsync's "is Whisper the same provider as Chat?" shortcut is allowed to
+    // fire for "local" too (previously this was deliberately a different key, "localserver", to
+    // PREVENT that shortcut from conflating two unrelated servers under the old split-config
+    // design — no longer applicable now that it really is one server/config for both).
+    public static readonly string[] TranscriptionKeys      = ["openai", "groq", "azure", "local"];
 
     public AiTabViewModel(ConfigService config, AiChatService ai, WhisperService whisper)
     {
@@ -51,6 +85,11 @@ public partial class AiTabViewModel : ObservableObject
         SelectedTranscriptionProviderIndex = Array.IndexOf(TranscriptionKeys, cfg.TranscriptionProvider);
         SystemPrompt        = cfg.SystemPrompt;
         PresentationContext = cfg.PresentationContext;
+        MaxTokens           = cfg.MaxTokens;
+        ShowFollowUpSuggestions = cfg.ShowFollowUpSuggestions;
+        Glossary            = cfg.Glossary;
+        foreach (var path in cfg.KnowledgeBaseFiles)
+            KnowledgeBaseFiles.Add(path);
 
         // Assigning WhisperModelPath below fires OnWhisperModelPathChanged, which is what
         // actually loads the model — so a path saved from a previous session gets loaded
@@ -65,6 +104,13 @@ public partial class AiTabViewModel : ObservableObject
         // WhisperModelPath's own debounced load means the two naturally coalesce via the shared
         // CancellationTokenSource instead of racing two concurrent loads of the same file.
         UseLocalWhisper = cfg.UseLocalWhisper;
+
+        // Live-refresh the usage summary after every chat call (and after a manual reset) —
+        // AiChatService is a singleton (App.AiChat) that outlives this ViewModel, so no
+        // unsubscribe is needed (this ViewModel itself lives for the Controller window's
+        // whole lifetime, same as every other ViewModel in this app).
+        _ai.UsageChanged += (_, _) => RefreshUsageSummary();
+        RefreshUsageSummary();
     }
 
     partial void OnSelectedChatProviderIndexChanged(int value)
@@ -96,6 +142,65 @@ public partial class AiTabViewModel : ObservableObject
         _config.Current.PresentationContext = value;
         _config.Save();
     }
+
+    partial void OnGlossaryChanged(string value)
+    {
+        _config.Current.Glossary = value;
+        _config.Save();
+    }
+
+    /// <summary>Adds a reference document path to the knowledge base — no-op if already present
+    /// (the file picker lets a user select the same file twice across two separate Add clicks).
+    /// Bound to the Settings → KNOWLEDGE BASE card's "+ Add file(s)…" picker result.</summary>
+    [RelayCommand]
+    public void AddKnowledgeBaseFile(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || KnowledgeBaseFiles.Contains(path)) return;
+        KnowledgeBaseFiles.Add(path);
+        PersistKnowledgeBaseFiles();
+    }
+
+    /// <summary>Removes a reference document from the knowledge base — this only stops it being
+    /// searched going forward; the file on disk is untouched.</summary>
+    [RelayCommand]
+    public void RemoveKnowledgeBaseFile(string path)
+    {
+        KnowledgeBaseFiles.Remove(path);
+        PersistKnowledgeBaseFiles();
+    }
+
+    private void PersistKnowledgeBaseFiles()
+    {
+        _config.Current.KnowledgeBaseFiles = [.. KnowledgeBaseFiles];
+        _config.Save();
+    }
+
+    partial void OnMaxTokensChanged(int value)
+    {
+        _config.Current.MaxTokens = value;
+        _config.Save();
+    }
+
+    partial void OnShowFollowUpSuggestionsChanged(bool value)
+    {
+        _config.Current.ShowFollowUpSuggestions = value;
+        _config.Save();
+    }
+
+    private void RefreshUsageSummary()
+    {
+        UsageSummary = _ai.TotalCalls == 0
+            ? "No calls yet this session."
+            : $"{_ai.TotalCalls} call{(_ai.TotalCalls == 1 ? "" : "s")} — " +
+              $"{_ai.TotalPromptTokens:N0} prompt + {_ai.TotalCompletionTokens:N0} completion = " +
+              $"{_ai.TotalPromptTokens + _ai.TotalCompletionTokens:N0} tokens total";
+    }
+
+    /// <summary>Zeroes the running token-usage counters — e.g. starting a fresh stream/show and
+    /// wanting a clean count for it. Does not affect any provider's real usage/billing, only
+    /// this in-memory session display.</summary>
+    [RelayCommand]
+    public void ResetUsage() => _ai.ResetUsage();
 
     partial void OnWhisperModelPathChanged(string value)
     {
@@ -157,7 +262,7 @@ public partial class AiTabViewModel : ObservableObject
         }
 
         WhisperModelStatus = "Loading model…";
-        var ok = await _whisper.LoadModelAsync(path);
+        var ok = await _whisper.LoadModelAsync(path, _config.Current.Glossary);
         WhisperModelStatus = ok ? "✓ Model loaded" : "⚠ Failed to load model";
     }
 
@@ -233,7 +338,7 @@ public partial class AiTabViewModel : ObservableObject
             }
             else
             {
-                var ok = await _whisper.LoadModelAsync(WhisperModelPath);
+                var ok = await _whisper.LoadModelAsync(WhisperModelPath, cfg.Glossary);
                 WhisperModelStatus = ok ? "✓ Model loaded" : "⚠ Failed to load model";
                 whisperLine = ok
                     ? "Whisper (local): ✓ Loaded successfully"

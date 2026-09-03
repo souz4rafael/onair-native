@@ -27,6 +27,10 @@ Use this file to resume development in a new session. Tell Copilot:
   CommunityToolkit.Mvvm 8.3.2, System.Security.Cryptography.ProtectedData 8.0.0, plus two sibling
   companion projects: `streamdeck-plugin/` (Node/TS, Elgato Stream Deck plugin) and
   `mcp-server/` (C# console app, Model Context Protocol server) — see "Remote control" below.
+- **Tests:** `OnAirNative.Tests\` (pure-logic unit tests), `OnAirMcp.Tests\` (mcp-server's
+  `ToolGate`), `OnAirNative.IntegrationTests\` (drives the real running app over the
+  RemoteControlService WebSocket protocol) — see "Testing & CI" below for the full tiered
+  breakdown, plus `.github\workflows\ci.yml` and `scripts\check-bundled-assets.ps1`.
 
 ---
 
@@ -721,10 +725,122 @@ Limited for: Chrome/Edge/modern Chromium (DirectComposition surfaces bypass the 
   the "Terminology" section near the top of this file.
 
 **Deferred**
-- Automated tests and CI. There is no test project and no GitHub Actions workflow; validation is
-  currently `dotnet build` plus manual smoke tests (and, for the MCP server, `npx
-  @modelcontextprotocol/inspector --cli`).
 - The Stream Deck title-reappearing bug above.
+
+Automated tests + CI are no longer deferred — see "Testing & CI" below.
+
+---
+
+## Testing & CI
+
+Three test tiers, plus a pre-commit hygiene script — all added in one pass (2026-09-03), all
+GREEN as of this writing.
+
+**Tier 1 — `OnAirNative.Tests/` (pure logic, no GUI, no live app).** xUnit, `net8.0-windows`,
+references ONLY `OnAirNative.Core.csproj` (see below), never the WinUI `OnAirNative.csproj`.
+Covers `ScriptParser` (headings/bold/italic parsing, 18 tests), `ConfigService` (save/load
+round-trip, secret encryption, legacy-folder migration, 9 tests, always against an isolated temp
+directory — never the real `%LocalAppData%\onAIr\config.json`), `AiChatService` (`ProviderParams`
+routing for all 6 providers + `TestConnectionAsync` auth-header selection via a fake
+`HttpMessageHandler`, no real network calls), and `UpdateService` (`IsNewer`/`NormalizeForParse`
+version-compare edge cases). Run: `dotnet test OnAirNative.Tests\OnAirNative.Tests.csproj`.
+
+- **`OnAirNative.Core/` — the key architectural enabler.** A plain `net8.0-windows` class library
+  (Windows-only APIs like DPAPI still work, but *no* `-10.0.19041.0` UWP-SDK suffix and no
+  `UseWinUI`) holding every pure/testable service: `ConfigService`, `AiChatService`,
+  `UpdateService`, `SecretProtector`, `ScriptParser`, plus the `AppConfig`/`ScriptDocument` models.
+  `OnAirNative.csproj` now `ProjectReference`s it instead of defining these types itself.
+  **Why this project exists at all**: a plain xUnit test project cannot `ProjectReference` the
+  WinUI `OnAirNative.csproj` directly — it fails with `APPX3217: SDK folder containing
+  'UAP.props' cannot be located`, because the `net8.0-windows10.0.19041.0` + `UseWinUI=true` +
+  `Microsoft.WindowsAppSDK` combination pulls in MSIX/MrtCore PRI-generation build tooling
+  transitively, regardless of the *referencing* project's own settings (`WindowsPackageType=None`
+  on the test project does **not** avoid this). Extracting the pure logic into a separate
+  library with a plain `net8.0-windows` TFM sidesteps the problem entirely.
+- Testability seams added to enable this — all purely additive (optional constructor params /
+  `private` → `internal` visibility widening), zero existing call sites needed changes:
+  `ConfigService(string? configDirectory = null)`, `AiChatService(HttpClient? httpClient = null)`,
+  `AiChatService.ProviderParams`/`UpdateService.IsNewer`/`NormalizeForParse` widened to
+  `internal`, exposed to the test assembly via `OnAirNative.Core/AssemblyInfo.cs`'s
+  `[assembly: InternalsVisibleTo("OnAirNative.Tests")]`.
+
+**Tier 2 — `OnAirMcp.Tests/` (mcp-server's `ToolGate` in isolation).** xUnit, plain `net8.0`
+(matches `OnAirMcp.csproj` itself), `ProjectReference`s `mcp-server\OnAirMcp.csproj` directly (an
+"Exe"-output project can still be referenced by a test project — no conflict, since the test host
+supplies its own entry point). Lives at the **repo root**, not inside `mcp-server\` — nesting a
+test project inside another SDK-style project's own folder makes that project's default
+`**/*.cs` glob silently compile the nested test files too (hit this for real: `OnAirMcp.csproj`
+started failing with `CS0246: 'Xunit' could not be found` once `OnAirMcp.Tests` briefly lived at
+`mcp-server\OnAirMcp.Tests\`). Covers `ToolGate.IsDisabled` (fail-open on missing/malformed
+config, correct enable/disable matching) via `ToolGate`'s own `configPathOverride` param — deliberately does **not**
+test `OnAirClient`'s request/response correlation logic in isolation (it's a hardcoded singleton
+bound to a fixed real port; better covered by Tier 3's real end-to-end connection than a forced,
+disproportionately invasive unit test). Run:
+`dotnet test OnAirMcp.Tests\OnAirMcp.Tests.csproj`.
+
+**Tier 3 — `OnAirNative.IntegrationTests/` (the real, running app, over the wire).** xUnit, plain
+`net8.0`, **zero** project reference to anything WinUI — it launches the actual, already-built
+`OnAirNative.exe` as a child process (`OnAirAppFixture`, shared once per test class via
+`IClassFixture<>`) and drives it purely over the `RemoteControlService` WebSocket protocol
+(`ws://127.0.0.1:47823/`), the exact same transport the Stream Deck plugin and MCP server use.
+This is the one tier that catches real wiring bugs the other two structurally cannot (a JSON
+field rename on one side of the protocol, `ExecuteAction` not actually reachable from the
+WebSocket handler, etc.) — it directly replaces the ad-hoc Node WebSocket scripts used earlier
+this session to test the chapter/formatting feature (native file-open pickers aren't reliably
+UI-automatable; `{"op":"loadScript","path":...}` exercises the identical code path).
+  - **Isolation**: `OnAirAppFixture` sets `ONAIR_CONFIG_DIR` (a new env var `App.xaml.cs` now
+    checks before constructing `ConfigService`, unset in every normal launch) to a fresh temp
+    directory, so these tests never read/write the real `%LocalAppData%\onAIr\config.json` —
+    same discipline as Tier 1's `ConfigServiceTests`. `RemoteControlEnabled` defaults to `true`,
+    so the WebSocket server starts with zero extra setup on a brand-new config.
+  - **Protocol gotcha that caused real test failures while building this**: `getState` (like
+    `command`/`adjust`) is **fire-and-forget** per `RemoteControlService`'s own protocol — it
+    only triggers a `{"op":"state",...}` broadcast, never a correlated `{"op":"result","id":...}`
+    reply. An early version of this fixture wrongly awaited a correlated reply for `getState`
+    that would never arrive, hit the (unrelated but compounding) issue below, and cascaded into
+    failing every other test in the run.
+  - **`ClientWebSocket` architecture gotcha**: cancelling an in-flight `ReceiveAsync` call
+    **permanently aborts** the connection — this is documented .NET framework behavior, not a
+    bug. A naive "wrap the socket receive in my own timeout" helper therefore corrupts the
+    connection for every subsequent test the moment any single wait legitimately times out.
+    Fixed by having one background loop own every real `ReceiveAsync` call for the connection's
+    whole lifetime, pushing parsed messages into an in-memory `Channel<JsonDocument>` — callers
+    cancel their own timeout against the *channel read*, never the socket itself, so a timeout is
+    always safe to recover from.
+  - Run: `dotnet test OnAirNative.IntegrationTests\OnAirNative.IntegrationTests.csproj` (needs
+    `OnAirNative.sln` already built in Debug — the fixture auto-discovers
+    `OnAirNative\bin\Debug\net8.0-windows10.0.19041.0\win-x64\OnAirNative.exe`, or set
+    `ONAIR_EXE_PATH` to point elsewhere).
+
+**`scripts/check-bundled-assets.ps1` — bundled-asset staleness check (local pre-commit tool).**
+Compares `mcp-server`/`streamdeck-plugin` source file timestamps against their bundled copies
+under `OnAirNative\Assets\` (`mcp-server\OnAirMcp.dll` and `onair-remote.streamDeckPlugin`) —
+motivated by two real bugs this session where a source edit shipped without rebuilding+recopying
+the bundled asset first. Run before any commit/release touching either folder:
+`pwsh scripts\check-bundled-assets.ps1` (exit code 1 if stale, with exact rebuild/copy commands
+printed). **Important caveat, by design**: git does not preserve file modification timestamps on
+checkout — a fresh clone resets every file's mtime to the checkout moment. That makes this
+script's real signal a *local working-tree* check (exactly how both real bugs were originally
+caught — by hand, comparing timestamps in the same checkout between an edit and a forgotten
+rebuild), not a reliable CI-side gate, which is why it is **not** wired into `ci.yml`.
+
+**`.github/workflows/ci.yml` — GitHub Actions, `windows-latest` throughout** (required — the app
+is WinUI 3 and Tier 3 launches the real compiled `.exe`). Three independent jobs:
+1. `build-and-unit-test` — builds `OnAirNative.sln`, runs Tier 1 + Tier 2. **Required to merge.**
+2. `streamdeck-plugin-build` — `npm ci && npm run build` for the Stream Deck plugin (pure
+   TypeScript/rollup build, no runtime execution). **Required to merge.**
+3. `integration-tests` — builds `OnAirNative.sln`, runs Tier 3. Marked `continue-on-error: true`
+   deliberately: it was verified locally (repeatedly, 7/7 passing) and `OnAirNative.csproj`
+   already publishes with `WindowsAppSDKSelfContained=true` (bundles its own WinUI runtime, no
+   extra install needed on the runner) — but launching a full interactive WinUI window on a
+   GitHub-hosted runner is genuinely new territory this project hasn't exercised, and runner-image
+   specifics (desktop session behavior, Defender/firewall handling of a freshly-built unsigned
+   `.exe`) can't be fully verified without watching real runs on GitHub's own infrastructure.
+   Promote to required once a handful of real runs prove stable.
+
+Deliberately **not** attempted: UI Automation in CI (unreliable without a real interactive
+desktop/input focus on a hosted runner — this whole session's own screenshot/UI-Automation work
+already showed how fragile that is even on a real developer machine).
 
 ---
 
@@ -830,17 +946,23 @@ on the next save.
 
 ## Release checklist
 
-1. Bump `AboutTabViewModel.Version` and `PRODUCT_VERSION` in `installer/onair-native.nsi`.
-2. If `streamdeck-plugin/` or `mcp-server/` changed since the last release, rebuild + recopy their
-   bundled assets FIRST (a stale bundled copy silently keeps old behavior — bit once already):
+1. Run the test suite first: `dotnet test OnAirNative.Tests\OnAirNative.Tests.csproj` and
+   `dotnet test OnAirMcp.Tests\OnAirMcp.Tests.csproj` (see "Testing & CI" above). Optionally also
+   `dotnet test OnAirNative.IntegrationTests\OnAirNative.IntegrationTests.csproj` for a real
+   end-to-end pass over the RemoteControlService protocol.
+2. Bump `AboutTabViewModel.Version` and `PRODUCT_VERSION` in `installer/onair-native.nsi`.
+3. If `streamdeck-plugin/` or `mcp-server/` changed since the last release, rebuild + recopy their
+   bundled assets FIRST (a stale bundled copy silently keeps old behavior — bit once already).
+   Run `pwsh scripts\check-bundled-assets.ps1` to check whether this step is actually needed
+   before assuming it isn't:
    - `streamdeck-plugin/`: `npm run build` → `streamdeck pack com.souz4rafael.onair.sdPlugin -o dist -f`
      → copy `dist\com.souz4rafael.onair.streamDeckPlugin` → `OnAirNative\Assets\onair-remote.streamDeckPlugin`
    - `mcp-server/`: `dotnet publish -c Release -o publish --self-contained false` → copy
      `publish\*` (minus `.pdb`) → `OnAirNative\Assets\mcp-server\`
-3. `dotnet publish -c Release -r win-x64 --self-contained true -p:WindowsPackageType=None -o ..\dist\publish-current`
-4. `& "C:\Program Files (x86)\NSIS\makensis.exe" installer\onair-native.nsi`
+4. `dotnet publish -c Release -r win-x64 --self-contained true -p:WindowsPackageType=None -o ..\dist\publish-current`
+5. `& "C:\Program Files (x86)\NSIS\makensis.exe" installer\onair-native.nsi`
    (needs `installer/redist/WindowsAppRuntimeInstall-x64.exe` — see `installer/README.md`)
-5. `gh release create vX.Y.Z` and attach the setup `.exe`.
+6. `gh release create vX.Y.Z` and attach the setup `.exe`.
 
 **Asset retention policy:** by default, older releases' installer `.exe` assets get stripped
 (keeping only the latest) to save space — but this is a judgment call per release, not an automatic

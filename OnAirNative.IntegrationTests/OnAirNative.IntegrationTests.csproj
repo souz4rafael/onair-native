@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Plain net8.0, NOT a ProjectReference to the WinUI OnAirNative.csproj — this suite never
+         compiles against the app's types. It launches the real, already-built OnAirNative.exe as
+         an external process and talks to it purely over the RemoteControlService WebSocket
+         protocol (JSON text frames), the same way the Stream Deck plugin and MCP server do. That
+         sidesteps the APPX3217/MSIX-tooling problem entirely (see OnAirNative.Tests' comments)
+         since there is no project reference to a WinUI/WindowsAppSDK project at all. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

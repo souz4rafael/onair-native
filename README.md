@@ -32,7 +32,18 @@ left, **Hide Controller** on the right._
 
 _Press **● Record** (or `Ctrl+Alt+R`) to capture a client question. onAIr transcribes it via Whisper
 and sends it to your chosen AI provider. The answer appears in the TP instantly. Configure chat +
-transcription providers independently._
+transcription providers independently. The **Glossary** field (product names, jargon, acronyms)
+biases both Whisper transcription and the AI's answers toward your exact terminology._
+
+---
+
+### Controller — Pacing coach & conversation memory
+
+[![Controller pacing and conversation memory](OnAirNative/Assets/screenshots/screenshot-controller-pacing.png)](OnAirNative/Assets/screenshots/screenshot-controller-pacing.png)
+
+_After each recorded question, a rough words-per-minute **pacing** estimate appears here — based on
+actual speaking time (pauses excluded), presenter-side only, never shown on the TP. Multi-turn
+conversation memory (last 6 Q&A turns) and running token usage are tracked in the same card._
 
 ---
 
@@ -52,8 +63,30 @@ tools._
 [![Controller Settings tab](OnAirNative/Assets/screenshots/screenshot-controller-settings.png)](OnAirNative/Assets/screenshots/screenshot-controller-settings.png)
 
 _Choose your audio input device (for recording and voice scroll), configure the voice scroll
-sensitivity threshold, and pick a **System / Light / Dark** theme for the Controller — it applies
-instantly, no restart needed._
+sensitivity threshold, and manage all 7 AI providers — including **Local LM** for self-hosted
+servers like Ollama or LM Studio. Pick a **System / Light / Dark** theme for the Controller — it
+applies instantly, no restart needed._
+
+---
+
+### Controller — Knowledge base
+
+[![Controller Knowledge base card](OnAirNative/Assets/screenshots/screenshot-controller-knowledgebase.png)](OnAirNative/Assets/screenshots/screenshot-controller-knowledgebase.png)
+
+_Attach small `.txt`/`.md` reference documents — product specs, FAQs, pricing — and onAIr
+automatically searches them for relevant excerpts when answering a question. No embeddings/vector
+database, no extra AI call: a lightweight, instant, local relevance search._
+
+---
+
+### Local LM provider setup
+
+[![Local LM provider configuration dialog](OnAirNative/Assets/screenshots/screenshot-local-lm-dialog.png)](OnAirNative/Assets/screenshots/screenshot-local-lm-dialog.png)
+
+_One config serves BOTH chat and transcription for a self-hosted server (Ollama, LM Studio,
+llama-server, LocalAI) — set a Chat model, a Whisper model, or both, depending on what your server
+supports. See the [Local LLM](#local-llm-ollama--lm-studio--self-hosted-incl-over-your-network)
+chapter below for full setup steps, including reaching a server on another PC on your network._
 
 ---
 
@@ -87,8 +120,9 @@ including a shared screen or recording — while staying invisible to viewers by
 - **Manual scroll** — `Ctrl+Alt+PgUp / PgDn`, step size tunable in the Controller (global, works
   even when Teams has focus)
 - **Auto-scroll** — continuous smooth scroll; speed tunable in the Controller or via `Ctrl+Alt+. / ,`
-- **Voice-activated scroll** — microphone RMS detection with its own independent speed control
-  (separate from Auto-scroll speed); sensitivity/threshold adjustable in Settings
+- **Voice-activated scroll** — real voice-activity detection (attack/release hysteresis, not a
+  raw instantaneous level compare) with its own independent speed control (separate from
+  Auto-scroll speed); sensitivity/threshold adjustable in Settings
 - **Only the active scroll mode's control is shown** — Manual/Auto/Voice each get their own
   dedicated speed control in the Controller instead of all three competing for space
 - **Font size** — tunable in the Controller or via `Ctrl+Alt+= / -`, applies live to the TP
@@ -104,9 +138,14 @@ including a shared screen or recording — while staying invisible to viewers by
   still-forming transcript of what you've said so far, a few seconds behind; see the model-size
   note below
 - **AI answer** — sent to your chosen LLM; displayed in the TP
-- **6 chat providers** — Azure OpenAI · OpenAI · Groq · Anthropic Claude · Google Gemini · Mistral
+- **7 chat providers** — Azure OpenAI · OpenAI · Groq · Anthropic Claude · Google Gemini · Mistral · Local LM
 - **Split providers** — use Groq for Whisper, Anthropic for chat, for example
 - **System prompt + presentation context** — customise tone, language, persona per session
+- **Glossary + knowledge base** — custom vocabulary biases both transcription and answers; small
+  reference documents (.txt/.md) get automatically searched for relevant excerpts per question
+- **Pacing coach** — a rough words-per-minute estimate after each recorded question, based on
+  actual speaking time (pauses excluded); presenter-side only, shown in the Controller, never on
+  the TP
 
 ### Controller window
 Every tab is organised into cards (bold, letter-spaced, accent-colored titles) that group related
@@ -199,11 +238,14 @@ Open **Controller → Q&A tab** → choose a provider → click **⚙ Configure 
 | **Anthropic Claude** | [console.anthropic.com](https://console.anthropic.com) | Pay-per-use |
 | **Google Gemini** | [aistudio.google.com](https://aistudio.google.com) | Free tier |
 | **Mistral** | [console.mistral.ai](https://console.mistral.ai) | Pay-per-use |
+| **Local LM** | Self-hosted (Ollama/LM Studio/etc.) — see [Local LLM](#local-llm-ollama--lm-studio--self-hosted-incl-over-your-network) below | Free |
 
 ### Transcription providers (Whisper)
 
 Azure OpenAI, OpenAI and Groq support the Whisper API. If you use Anthropic/Gemini/Mistral for
-chat, set a separate transcription provider.
+chat, set a separate transcription provider. **Local LM** (the same self-hosted server config as
+above, if it supports transcription) is also available — see
+[Local LLM](#local-llm-ollama--lm-studio--self-hosted-incl-over-your-network) below.
 
 **Groq is the easiest way to start** — free tier, no credit card.
 
@@ -234,6 +276,143 @@ Leave blank to use the cloud API.
 > **Best cost/benefit (real-world tested):** `ggml-tiny` **unquantized** and `ggml-base` with
 > **q5_1** quantization. Quantized variants (`q5_1`, `q5_0`, `q8_0`, etc.) trade a little accuracy
 > for a smaller download and faster inference — worth it for `base`, not necessary for `tiny`.
+
+---
+
+## Local LLM (Ollama / LM Studio / self-hosted, incl. over your network)
+
+onAIr can talk to a self-hosted LLM server instead of a cloud provider — same machine, or
+another one on your local network. **One config, one server** — Local LM can serve both chat
+*and* transcription from the same base URL (or just one of the two, depending on what your
+server supports). No new dependency inside onAIr itself: any server that speaks the
+OpenAI-compatible HTTP API works.
+
+### Setting up Local LM
+
+Works with **Ollama**, **LM Studio**, llama.cpp's own `llama-server`,
+[LocalAI](https://localai.io) (the best fit if you want ONE server for both chat and
+transcription), or anything else exposing OpenAI-compatible `/v1/chat/completions` and/or
+`/v1/audio/transcriptions` endpoints.
+
+1. Install and run your server of choice (e.g. [ollama.com/download](https://ollama.com/download)),
+   then pull a model:
+   ```
+   ollama pull llama3.2
+   ```
+2. In **Controller → Q&A tab**, set Chat provider and/or Transcription provider to **Local LM**
+   → **⚙ Configure provider…** (same dialog either way — it's one shared config).
+3. Fill in:
+   - **Server base URL** — `http://localhost:11434/v1` if your server runs on this same machine.
+   - **API Key** — leave blank. Ollama (and most local servers) don't require one.
+   - **Whisper model** — leave blank if this server doesn't support transcription (e.g. plain
+     Ollama — it's chat-only). Set it (e.g. `whisper-1`) if your server does, like LocalAI.
+   - **Chat model** — exactly what you pulled, e.g. `llama3.2` (Ollama model names follow a
+     `model:tag` format — `llama3.2:8b`, `qwen2.5:7b`, etc. — the tag defaults to `latest` if
+     you leave it off, matching whatever `ollama pull` used).
+4. Click **Test connection** to confirm before saving.
+
+> **One server, one config:** unlike the cloud providers (which are always separate accounts
+> anyway), Local LM intentionally has a single base URL/key shared by both roles — set the model
+> field(s) for whichever role(s) your server actually supports. If you need genuinely different
+> servers for chat vs. transcription (e.g. Ollama for chat + a separate whisper.cpp server for
+> transcription), point Local LM at whichever one matters more to you, and use a cloud Whisper
+> provider (or the fully in-process [local Whisper model](#whisper-local-model-optional)) for the
+> other — Local LM can't address two different base URLs at once.
+
+### Using a server on another PC on your network
+
+By default Ollama only listens on `127.0.0.1` (i.e. **not** reachable from another machine, even
+on the same network) — you need to explicitly opt in:
+
+1. On the machine **running Ollama**: open *Settings → Edit environment variables for your
+   account* (Windows), add a new variable `OLLAMA_HOST` with value `0.0.0.0:11434`, click
+   OK/Apply.
+2. Quit Ollama from the taskbar, then relaunch it from the Start menu (env var changes only take
+   effect on the next launch).
+3. Allow inbound connections to port `11434` through that machine's firewall (Windows Defender
+   Firewall → Advanced settings → Inbound Rules → New Rule → Port → TCP `11434`).
+4. On **the machine running onAIr**, set **Server base URL** to that machine's LAN IP instead of
+   `localhost`, e.g. `http://192.168.1.50:11434/v1`. Find the IP via `ipconfig` on the Ollama
+   machine (look for "IPv4 Address" under your active network adapter).
+
+The same idea applies to LM Studio (its own Developer → Server settings has a "Serve on Local
+Network" toggle) or `llama-server` (`--host 0.0.0.0` command-line flag).
+
+### A note on transcription-only servers (e.g. whisper.cpp's own bundled server)
+
+Local LM's fixed `/audio/transcriptions` path convention targets the more standardized
+OpenAI-compatible server shape (Ollama, LM Studio, LocalAI, llama-server) — **not** whisper.cpp's
+own bundled `whisper-server`, which uses a different, non-standard `/inference` endpoint. If you
+specifically want to run whisper.cpp's own server for transcription, use the fully in-process
+[local Whisper model](#whisper-local-model-optional) instead (same underlying whisper.cpp
+technology, no separate server process needed) — or run
+[speaches](https://github.com/speaches-ai/speaches) or [LocalAI](https://localai.io), both of
+which do implement the standard `/v1/audio/transcriptions` path Local LM expects.
+
+### Troubleshooting
+
+- **"Could not reach server"** in Test connection — double-check the URL (including `http://`
+  and port), that the server process is actually running, and that any firewall on the server's
+  machine allows the port (see the firewall step above).
+- **Works on localhost but not from another PC** — this is almost always the "listens on
+  127.0.0.1 only" default (see `OLLAMA_HOST` above) or a firewall blocking the port, not an
+  onAIr-side problem.
+- **Model not found** — the model name in onAIr's Local LM settings must match exactly what the
+  server has available (`ollama list` shows what's pulled; LM Studio shows loaded models in its
+  own UI).
+- **Transcription fails with "no Whisper model configured"** — set the **Whisper model** field in
+  Local LM's config (Settings → AI PROVIDERS → Local LM → Configure), or pick a different
+  Transcription provider if your server doesn't support transcription at all.
+
+---
+
+## Knowledge base & glossary
+
+Two related, independent features that help transcription and answers use the right words and
+facts — both live in Controller → **Q&A tab → PROMPTS** (glossary) and **Settings tab →
+KNOWLEDGE BASE** (reference documents). Both are off by default: completely inert until you
+actually set a glossary or attach a file.
+
+### Glossary / vocabulary
+
+A free-text field (Q&A tab → PROMPTS card) for product names, jargon, acronyms, or spellings you
+want onAIr to get right — e.g. `Contoso, Northwind Traders, SKU-4471, Kubernetes`. It's injected
+into **both**:
+
+- **Whisper transcription** — as the standard Whisper "prompt" bias parameter, nudging
+  recognition toward these exact words instead of a phonetically-similar guess.
+- **Chat answers** — as a labeled "Glossary" section in the system prompt, so the AI uses your
+  exact terms/spellings instead of its own guess.
+
+> **Local Whisper model note:** for the fully in-process local model (not a cloud/Local LM
+> provider), the glossary is baked into the model at **load** time. If you change the glossary
+> after the model is already loaded, reload it (Settings → WHISPER MODEL → Load/Unload → Load
+> again) to pick up the change. Cloud/Local LM transcription re-sends the current glossary on
+> every request, so no reload is needed there.
+
+### Knowledge base (reference documents)
+
+Attach small `.txt`/`.md` reference documents (Settings → KNOWLEDGE BASE → **+ Add file(s)…**) —
+product spec sheets, FAQs, pricing, anything you'd otherwise have to remember. When you ask a
+question, onAIr automatically searches the attached documents for relevant excerpts and includes
+only those in the AI's context — nothing is searched or shown manually.
+
+**How the search works (and why):** onAIr uses a lightweight keyword/TF-IDF-style relevance score
+— **not** an embeddings/vector-database pipeline. For a realistic knowledge base here (a handful
+of small personal documents, searched live during a real-time Q&A exchange), an embeddings
+pipeline would add real API cost, network latency, and an external dependency for no meaningful
+accuracy gain over simple term-overlap scoring on a small corpus. This keeps search fully local,
+deterministic, and instant — no extra AI call, nothing to configure beyond picking files.
+
+- Documents are split into paragraph-sized excerpts; a question with no real overlap with any
+  excerpt gets **no** reference material injected — it never pads the AI's context with
+  irrelevant text.
+- Editing an attached file externally is picked up automatically on your next question — no
+  "reload" step needed.
+- Only `.txt` and `.md` files are supported (no `.docx`/`.pdf`/`.xlsx` parsing — convert those to
+  plain text first, keeping this feature lightweight and dependency-free).
+- Removing a file from the KNOWLEDGE BASE card only stops it being searched — the file on disk is
+  never touched or deleted.
 
 ---
 

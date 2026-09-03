@@ -1,5 +1,7 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using OnAirNative.Models;
 using OnAirNative.Services;
 
 namespace OnAirNative.ViewModels;
@@ -18,6 +20,13 @@ public partial class ScrollTabViewModel : ObservableObject
     [ObservableProperty] private string _fontFamily = "Segoe UI";
     [ObservableProperty] private double _opacity;
 
+    // Chapter navigation — mirrors overlay.ScriptDocument.Chapters (same "mirror the Overlay
+    // ViewModel for Controller display" pattern as LoadedFileName below). An
+    // ObservableCollection rather than an [ObservableProperty] list because the Controller's
+    // code-behind rebuilds the clickable chapter list off CollectionChanged, not a single
+    // property-changed notification — see ControllerWindow.PopulateChapters.
+    public ObservableCollection<ChapterInfo> Chapters { get; } = new();
+
     public ScrollTabViewModel(ConfigService config, OverlayViewModel overlay)
     {
         _config  = config;
@@ -35,6 +44,11 @@ public partial class ScrollTabViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(OverlayViewModel.LoadedFileName))
                 LoadedFileName = overlay.LoadedFileName;
+            else if (e.PropertyName == nameof(OverlayViewModel.ScriptDocument))
+            {
+                Chapters.Clear();
+                foreach (var chapter in overlay.ScriptDocument.Chapters) Chapters.Add(chapter);
+            }
         };
     }
 
@@ -43,6 +57,9 @@ public partial class ScrollTabViewModel : ObservableObject
 
     [RelayCommand]
     public void ScrollDown() => _overlay.Scroll(ScrollStep);
+
+    [RelayCommand]
+    public void JumpToChapter(ChapterInfo chapter) => _overlay.JumpToBlock(chapter.BlockIndex);
 
     [RelayCommand]
     public async Task OpenFileAsync(Microsoft.UI.Xaml.Window ownerWindow)

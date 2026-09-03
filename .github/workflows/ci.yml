@@ -1,0 +1,113 @@
+name: CI
+
+# Windows-only intentionally — OnAirNative is a WinUI 3 app and every job here either builds it
+# or (integration-tests) launches the real compiled .exe, so a windows-latest runner is required
+# throughout, not just for convenience.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  # Solid, required tier: pure build + unit tests, no GUI/desktop interaction, no timing-sensitive
+  # waits. This is the tier that should gate merges.
+  build-and-unit-test:
+    name: Build & unit tests (.NET)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      # Builds OnAirNative (WinUI app) + OnAirNative.Core (pure logic) + OnAirNative.Tests in one
+      # pass — OnAirNative.Tests only ever references OnAirNative.Core (see that project's own
+      # comments for why: a WinUI-tainted ProjectReference breaks a plain test project's build).
+      - name: Build OnAirNative.sln
+        run: dotnet build OnAirNative.sln -c Debug
+
+      - name: Run OnAirNative.Tests (ScriptParser, ConfigService, AiChatService, UpdateService)
+        run: dotnet test OnAirNative.Tests\OnAirNative.Tests.csproj -c Debug --no-build --logger "console;verbosity=normal"
+
+      # mcp-server lives outside OnAirNative.sln by design (plain net8.0 console app, kept
+      # separate from the WinUI solution's platform/TFM concerns). dotnet test both builds
+      # OnAirMcp.Tests and transitively builds OnAirMcp.csproj via its ProjectReference.
+      - name: Build & test mcp-server (OnAirMcp.Tests -> ToolGate)
+        run: dotnet test OnAirMcp.Tests\OnAirMcp.Tests.csproj -c Debug --logger "console;verbosity=normal"
+
+  # Solid, required tier: TypeScript compiles + rollup bundles successfully. Pure build, no
+  # runtime execution, so this is as reliable in CI as the .NET build job above.
+  streamdeck-plugin-build:
+    name: Build Stream Deck plugin (Node/TypeScript)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: streamdeck-plugin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: streamdeck-plugin/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: npm run build
+        run: npm run build
+
+  # Best-effort tier, NOT required to merge (continue-on-error) — see the long comment below for
+  # why. Still runs and reports its own pass/fail in the Actions UI; just doesn't block the
+  # overall workflow conclusion the way the two jobs above do.
+  #
+  # This launches the real, compiled OnAirNative.exe as a child process and drives it purely over
+  # the RemoteControlService WebSocket protocol (127.0.0.1:47823) — see
+  # OnAirNative.IntegrationTests/OnAirAppFixture.cs. It was verified locally (repeatedly, 7/7
+  # passing) on a real Windows desktop, and OnAirNative publishes with
+  # WindowsAppSDKSelfContained=true (bundles its own WinUI runtime, no separate install needed on
+  # the runner). That said, launching a full interactive WinUI window from a hosted GitHub Actions
+  # runner is genuinely new territory this project hasn't exercised before — a hosted runner's
+  # desktop session, Windows Defender/firewall behavior toward a freshly-built unsigned .exe, or
+  # other runner-image specifics could behave differently than this developer's own machine in
+  # ways that can't be fully verified without actually watching it run in GitHub's infrastructure.
+  # Once a handful of real runs on GitHub-hosted infrastructure prove this stable, remove
+  # `continue-on-error` to promote it to a required check.
+  integration-tests:
+    name: Remote-control integration tests (real app, best-effort)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      # Needed so OnAirAppFixture has a real OnAirNative.exe to launch — it auto-discovers this
+      # exact Debug/win-x64 build output path (see ResolveExePath), matching a plain local
+      # `dotnet build OnAirNative.sln -c Debug` with no extra flags needed.
+      - name: Build OnAirNative.sln
+        run: dotnet build OnAirNative.sln -c Debug
+
+      - name: Run RemoteControlService integration tests
+        run: dotnet test OnAirNative.IntegrationTests\OnAirNative.IntegrationTests.csproj -c Debug --logger "console;verbosity=normal"

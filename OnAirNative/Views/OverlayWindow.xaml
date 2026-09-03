@@ -69,22 +69,23 @@
                           HorizontalScrollBarVisibility="Disabled"
                           VerticalScrollMode="Enabled"
                           Visibility="Visible">
-                <TextBlock x:Name="ScriptTextBlock"
-                           Padding="16,12,16,24"
-                           TextWrapping="Wrap"
-                           Foreground="{StaticResource OverlayTextBrush}"
-                           FontSize="22"
-                           LineHeight="34"
-                           FontFamily="Segoe UI"
-                           IsTextSelectionEnabled="False"
-                           Text=""/>
+                <!-- Populated in code-behind, one child element per ScriptBlock (paragraph
+                     line or chapter-heading divider) — see OverlayWindow.RenderScriptDocument.
+                     Was a single TextBlock with a plain string; now each block gets its own
+                     element so (a) bold/italic can vary per-run within a line via Inlines, and
+                     (b) a chapter heading's element can be located later (TransformToVisual)
+                     to compute a jump-to-chapter scroll offset. -->
+                <StackPanel x:Name="ScriptBlocksPanel" Padding="0,12,0,24"/>
             </ScrollViewer>
 
             <!-- ─── Q&A panel ─────────────────────────────────────────────── -->
-            <Border x:Name="QaPanel"
-                    Background="{StaticResource OverlayBgBrush}"
-                    Padding="16,12"
-                    Visibility="Collapsed">
+            <ScrollViewer x:Name="QaScrollViewer"
+                          Background="{StaticResource OverlayBgBrush}"
+                          VerticalScrollBarVisibility="Hidden"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollMode="Enabled"
+                          Visibility="Collapsed">
+              <Border x:Name="QaPanel" Padding="16,12">
                 <StackPanel Spacing="10">
 
                     <!-- Status (recording / transcribing / getting answer) -->
@@ -126,6 +127,17 @@
                                Text=""
                                Visibility="Collapsed"/>
 
+                    <!-- Follow-up question suggestions (Block 2, opt-in via Settings) — plain,
+                         non-interactive text lines (NOT buttons) built in code-behind from
+                         OverlayViewModel.FollowUpSuggestions: short questions the PRESENTER
+                         could ask THEIR CLIENT next, to keep the conversation flowing (a
+                         sales/conversation-flow aid). Non-interactive both because the TP is
+                         frequently click-through/locked during live use, and because the
+                         presenter just reads/says these aloud themselves — there's nothing to
+                         click. Empty/collapsed whenever there are no suggestions (feature off,
+                         or none returned). -->
+                    <StackPanel x:Name="FollowUpSuggestionsPanel" Spacing="4"/>
+
                     <!-- Busy indicator -->
                     <ProgressRing x:Name="QaBusy"
                                   IsActive="False"
@@ -133,7 +145,8 @@
                                   Foreground="#4A90D9"
                                   Visibility="Collapsed"/>
                 </StackPanel>
-            </Border>
+              </Border>
+            </ScrollViewer>
 
         </Grid>
     </Grid>

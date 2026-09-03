@@ -31,12 +31,17 @@ public static class ToolGate
     /// <summary>True if the named tool (e.g. "onair_set_font_color") is currently disabled.
     /// Fails open (returns false / "enabled") on any read/parse error — a malformed or briefly
     /// mid-write config.json must never accidentally lock every tool out.</summary>
-    public static bool IsDisabled(string toolName)
+    /// <param name="configPathOverride">Overrides which config.json is read — used by
+    /// OnAirMcp.Tests to point at an isolated temp file instead of the real
+    /// %LocalAppData%\onAIr\config.json (never touch the developer's own real settings from a
+    /// test run).</param>
+    public static bool IsDisabled(string toolName, string? configPathOverride = null)
     {
         try
         {
-            if (!File.Exists(ConfigPath)) return false;
-            var json = File.ReadAllText(ConfigPath);
+            var path = configPathOverride ?? ConfigPath;
+            if (!File.Exists(path)) return false;
+            var json = File.ReadAllText(path);
             var config = JsonSerializer.Deserialize<MinimalConfig>(json, JsonOptions);
             return config?.McpDisabledTools?.Contains(toolName) ?? false;
         }
