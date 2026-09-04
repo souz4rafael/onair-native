@@ -44,7 +44,7 @@ public static class OnAirTools
         return "onAIr is running and reachable.";
     });
 
-    [McpServerTool(Name = "onair_get_state"), Description("Gets the full current state of onAIr: whether the teleprompter (TP) is open, locked, or hidden from screen share; whether the Controller window is hidden from screen share; recording status; the active AI chat provider; Whisper transcription model status (local vs cloud); font size, color, and family; teleprompter opacity; scroll mode (Manual/Auto/Voice) and its speed/step settings; the loaded script's filename; Q&A monitoring fields — the most recent question/answer, a turn counter that increments each completed Q&A round (poll this to detect new activity), the pacing (words-per-minute) summary and its coarse level (None/Slow/Good/Fast), follow-up suggestions, whether a Q&A session recording is active, and the current Copilot-insight footer text; AND the separate AI Insights window's own state — whether it's open, locked, or hidden from screen share, and its independent font size/opacity/font family. Use this before deciding what action to take, to answer any status question, or to monitor for new Q&A activity.")]
+    [McpServerTool(Name = "onair_get_state"), Description("Gets the full current state of onAIr: whether the teleprompter (TP) is open, locked, or hidden from screen share; whether the Controller window is hidden from screen share; recording status; the active AI chat provider; Whisper transcription model status (local vs cloud); font size, color, and family; teleprompter opacity; scroll mode (Manual/Auto/Voice) and its speed/step settings; the loaded script's filename; Q&A monitoring fields — the most recent question/answer, a turn counter that increments each completed Q&A round (poll this to detect new activity), the pacing (words-per-minute) summary and its coarse level (None/Slow/Good/Fast), follow-up suggestions, whether a Q&A session recording is active, and the current Copilot-insight footer text; AND the separate AI Insights window's own state — whether it's open, locked, or hidden from screen share, its independent font size/opacity/font family, and whether each of its 4 sections (Questions/External AI Insights/Pacing/Token Usage) is currently shown or hidden — see the onair_toggle_insights_show_* tools to flip those. Use this before deciding what action to take, to answer any status question, or to monitor for new Q&A activity.")]
     public static Task<string> OnairGetState() => SafeAsync("onair_get_state", async () =>
     {
         var state = await OnAirClient.Instance.GetStateAsync();
@@ -124,6 +124,50 @@ public static class OnAirTools
     {
         await OnAirClient.Instance.SendCommandAsync("ToggleInsightsCaptureProtection");
         return "Toggled AI Insights window visibility in screen share.";
+    });
+
+    // ── AI Insights window section toggles ────────────────────────────────────────────────
+    // Unlike the toggles above (which fire a HotkeyAction by name), these 4 mirror a plain
+    // AppConfig/OverlayViewModel bool with no dedicated hotkey — same pattern the Web Remote's
+    // wireToggleFields() uses (see app.js): read the field's current value off a fresh
+    // onair_get_state, then SetFieldAsync the negation. Each section corresponds 1:1 to one of
+    // the AI Insights window's 4 headers (QUESTIONS / EXTERNAL AI INSIGHTS / PACING / TOKEN
+    // USAGE) — purely a display toggle, the underlying data keeps being collected regardless.
+
+    [McpServerTool(Name = "onair_toggle_insights_show_questions"), Description("Toggles whether the AI Insights window's QUESTIONS section (follow-up questions the presenter could ask the client next) is shown or hidden. Toggles the current state — call onair_get_state first if you need to know which way it will flip.")]
+    public static Task<string> OnairToggleInsightsShowQuestions() => SafeAsync("onair_toggle_insights_show_questions", async () =>
+    {
+        var state = await OnAirClient.Instance.GetStateAsync();
+        var next = !state.ShowFollowUpsInInsights;
+        var (success, error) = await OnAirClient.Instance.SetFieldAsync("ShowFollowUpsInInsights", next);
+        return success ? $"AI Insights QUESTIONS section is now {(next ? "shown" : "hidden")}." : $"Error: {error ?? "Unknown error."}";
+    });
+
+    [McpServerTool(Name = "onair_toggle_insights_show_external"), Description("Toggles whether the AI Insights window's EXTERNAL AI INSIGHTS section (the free text pushed via onair_show_insight / an MCP client) is shown or hidden. Toggles the current state — call onair_get_state first if you need to know which way it will flip.")]
+    public static Task<string> OnairToggleInsightsShowExternal() => SafeAsync("onair_toggle_insights_show_external", async () =>
+    {
+        var state = await OnAirClient.Instance.GetStateAsync();
+        var next = !state.ShowExternalInsightsInInsights;
+        var (success, error) = await OnAirClient.Instance.SetFieldAsync("ShowExternalInsightsInInsights", next);
+        return success ? $"AI Insights EXTERNAL AI INSIGHTS section is now {(next ? "shown" : "hidden")}." : $"Error: {error ?? "Unknown error."}";
+    });
+
+    [McpServerTool(Name = "onair_toggle_insights_show_pacing"), Description("Toggles whether the AI Insights window's PACING section (words-per-minute coach summary) is shown or hidden. Toggles the current state — call onair_get_state first if you need to know which way it will flip.")]
+    public static Task<string> OnairToggleInsightsShowPacing() => SafeAsync("onair_toggle_insights_show_pacing", async () =>
+    {
+        var state = await OnAirClient.Instance.GetStateAsync();
+        var next = !state.ShowPacingInInsights;
+        var (success, error) = await OnAirClient.Instance.SetFieldAsync("ShowPacingInInsights", next);
+        return success ? $"AI Insights PACING section is now {(next ? "shown" : "hidden")}." : $"Error: {error ?? "Unknown error."}";
+    });
+
+    [McpServerTool(Name = "onair_toggle_insights_show_token_usage"), Description("Toggles whether the AI Insights window's TOKEN USAGE section (this session's AI call usage summary) is shown or hidden. Toggles the current state — call onair_get_state first if you need to know which way it will flip.")]
+    public static Task<string> OnairToggleInsightsShowTokenUsage() => SafeAsync("onair_toggle_insights_show_token_usage", async () =>
+    {
+        var state = await OnAirClient.Instance.GetStateAsync();
+        var next = !state.ShowTokenUsageInInsights;
+        var (success, error) = await OnAirClient.Instance.SetFieldAsync("ShowTokenUsageInInsights", next);
+        return success ? $"AI Insights TOKEN USAGE section is now {(next ? "shown" : "hidden")}." : $"Error: {error ?? "Unknown error."}";
     });
 
     [McpServerTool(Name = "onair_toggle_recording"), Description("Starts audio recording/Q&A capture in onAIr if stopped, or stops it if currently recording. Toggles the current state.")]

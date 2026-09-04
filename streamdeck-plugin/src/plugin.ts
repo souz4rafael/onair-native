@@ -21,6 +21,10 @@ import { ToggleInsightsAction } from "./actions/toggle-insights.js";
 import { LockInsightsAction } from "./actions/lock-insights.js";
 import { HideInsightsShareAction } from "./actions/hide-insights-share.js";
 import { PacingStatusAction } from "./actions/pacing-status.js";
+import { ToggleInsightsQuestionsAction } from "./actions/toggle-insights-questions.js";
+import { ToggleInsightsExternalAction } from "./actions/toggle-insights-external.js";
+import { ToggleInsightsPacingAction } from "./actions/toggle-insights-pacing.js";
+import { ToggleInsightsTokensAction } from "./actions/toggle-insights-tokens.js";
 
 streamDeck.logger.setLevel("info");
 
@@ -44,6 +48,10 @@ streamDeck.actions.registerAction(new ToggleInsightsAction());
 streamDeck.actions.registerAction(new LockInsightsAction());
 streamDeck.actions.registerAction(new HideInsightsShareAction());
 streamDeck.actions.registerAction(new PacingStatusAction());
+streamDeck.actions.registerAction(new ToggleInsightsQuestionsAction());
+streamDeck.actions.registerAction(new ToggleInsightsExternalAction());
+streamDeck.actions.registerAction(new ToggleInsightsPacingAction());
+streamDeck.actions.registerAction(new ToggleInsightsTokensAction());
 
 streamDeck.connect();
 

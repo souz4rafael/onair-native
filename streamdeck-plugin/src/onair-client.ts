@@ -40,6 +40,12 @@ export interface RemoteState {
 	insightFontSize: number;
 	insightOpacity: number;
 	insightFontFamily: string;
+
+	// ── AI Insights window: per-section show/hide toggles ────────────────────
+	showFollowUpsInInsights: boolean;
+	showExternalInsightsInInsights: boolean;
+	showPacingInInsights: boolean;
+	showTokenUsageInInsights: boolean;
 }
 
 /** Mirrors OnAirNative.Services.HotkeyAction — the shared command vocabulary between the
@@ -154,6 +160,20 @@ class OnAirClient {
 			this.ws.send(JSON.stringify({ op: "command", action }));
 		} catch (err) {
 			streamDeck.logger.warn(`onAIr: send failed: ${err}`);
+		}
+	}
+
+	/** Sets an absolute field value (e.g. {field:"ShowPacingInInsights", value:true}) — the same
+	 * "set" op the onAIr MCP server and Web Remote use for plain config fields that have no
+	 * dedicated HotkeyAction. `field` must be the PascalCase name RemoteControlService expects.
+	 * Fire-and-forget: the resulting state broadcast (not a "result" reply) is what updates the
+	 * key's icon, so no response correlation is needed here. */
+	setField(field: string, value: boolean | number | string): void {
+		if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+		try {
+			this.ws.send(JSON.stringify({ op: "set", field, value }));
+		} catch (err) {
+			streamDeck.logger.warn(`onAIr: setField failed: ${err}`);
 		}
 	}
 

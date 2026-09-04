@@ -470,6 +470,106 @@
                     "ShowTitle": false
                 }
             ]
+        },
+        {
+            "Name": "Show Questions in AI Insights",
+            "UUID": "com.souz4rafael.onair.toggle-insights-questions",
+            "Icon": "imgs/actions/toggle-insights-questions/icon",
+            "Tooltip": "Shows/hides the QUESTIONS section (follow-up question suggestions) inside the AI Insights window. Icon reflects the section's current visibility.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/toggle-insights-questions/off",
+                    "Name": "Off",
+                    "Title": "Show Questions",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                },
+                {
+                    "Image": "imgs/actions/toggle-insights-questions/on",
+                    "Name": "On",
+                    "Title": "Hide Questions",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Show External Insights in AI Insights",
+            "UUID": "com.souz4rafael.onair.toggle-insights-external",
+            "Icon": "imgs/actions/toggle-insights-external/icon",
+            "Tooltip": "Shows/hides the EXTERNAL AI INSIGHTS section (text pushed in via MCP/Stream Deck's onair_show_insight) inside the AI Insights window. Icon reflects the section's current visibility.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/toggle-insights-external/off",
+                    "Name": "Off",
+                    "Title": "Show External",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                },
+                {
+                    "Image": "imgs/actions/toggle-insights-external/on",
+                    "Name": "On",
+                    "Title": "Hide External",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Show Pacing in AI Insights",
+            "UUID": "com.souz4rafael.onair.toggle-insights-pacing",
+            "Icon": "imgs/actions/toggle-insights-pacing/icon",
+            "Tooltip": "Shows/hides the PACING section inside the AI Insights window. Icon reflects the section's current visibility.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/toggle-insights-pacing/off",
+                    "Name": "Off",
+                    "Title": "Show Pacing",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                },
+                {
+                    "Image": "imgs/actions/toggle-insights-pacing/on",
+                    "Name": "On",
+                    "Title": "Hide Pacing",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Show Token Usage in AI Insights",
+            "UUID": "com.souz4rafael.onair.toggle-insights-tokens",
+            "Icon": "imgs/actions/toggle-insights-tokens/icon",
+            "Tooltip": "Shows/hides the TOKEN USAGE section inside the AI Insights window. Icon reflects the section's current visibility.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/toggle-insights-tokens/off",
+                    "Name": "Off",
+                    "Title": "Show Tokens",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                },
+                {
+                    "Image": "imgs/actions/toggle-insights-tokens/on",
+                    "Name": "On",
+                    "Title": "Hide Tokens",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
         }
     ]
 }

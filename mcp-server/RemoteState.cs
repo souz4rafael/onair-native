@@ -31,6 +31,13 @@ public sealed record RemoteState(
     List<string> FollowUpSuggestions,
     bool QaSessionActive,
     string InsightText,
+    // ── AI Insights window's 4 independent section show/hide toggles — mirror
+    // OnAirNative.Services.RemoteState's fields of the same name exactly. Read via
+    // onair_get_state, flipped via the onair_toggle_insights_show_* tools (see OnAirTools.cs).
+    bool ShowFollowUpsInInsights,
+    bool ShowExternalInsightsInInsights,
+    bool ShowPacingInInsights,
+    bool ShowTokenUsageInInsights,
     bool InsightsOpen,
     bool InsightsLocked,
     bool InsightsHiddenInShare,

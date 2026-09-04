@@ -36,6 +36,10 @@ ACCENTS = {
     "green":  ((74, 222, 128, 255), (22, 163, 74, 255)),     # scroll-up / scroll-down
     "yellow": ((253, 224, 71, 255), (234, 179, 8, 255)),     # toggle-insights (open/glow)
     "indigo": ((129, 140, 248, 255), (79, 70, 229, 255)),    # lock-insights
+    "sky":     ((56, 189, 248, 255), (2, 132, 199, 255)),    # toggle-insights-questions
+    "lime":    ((163, 230, 53, 255), (77, 124, 15, 255)),    # toggle-insights-external
+    "emerald": ((52, 211, 153, 255), (5, 150, 105, 255)),    # toggle-insights-pacing
+    "fuchsia": ((232, 121, 249, 255), (162, 28, 175, 255)),  # toggle-insights-tokens
 }
 
 
@@ -338,6 +342,63 @@ def draw_gauge(draw, cx, cy, s, needle_deg):
     draw.ellipse([cx - hub_r, hub_cy - hub_r, cx + hub_r, hub_cy + hub_r], fill=WHITE)
 
 
+def draw_question_mark(draw, cx, cy, s, filled):
+    """'?' glyph for the AI Insights 'Questions' (follow-up suggestions) section toggle: a hook
+    (upper-right arc, same PIL arc convention as draw_padlock's shackle) flowing into a short
+    stem and a separated dot below — built from primitives to match this file's other glyphs
+    rather than rendered text. `filled` thickens the stroke for the "on" (visible) state."""
+    r = s * 0.20
+    hook_cy = cy - s * 0.15
+    lw = max(4, int(s * (0.075 if filled else 0.05)))
+    bbox = [cx - r, hook_cy - r, cx + r, hook_cy + r]
+    draw.arc(bbox, start=195, end=345, fill=WHITE, width=lw)
+    theta = math.radians(345)
+    stem_x = cx + r * math.cos(theta)
+    stem_y1 = hook_cy + r * math.sin(theta)
+    stem_y2 = stem_y1 + s * 0.16
+    draw.line([stem_x, stem_y1, stem_x, stem_y2], fill=WHITE, width=lw)
+    dot_r = s * 0.045
+    dot_cy = stem_y2 + s * 0.12
+    draw.ellipse([stem_x - dot_r, dot_cy - dot_r, stem_x + dot_r, dot_cy + dot_r], fill=WHITE)
+
+
+def draw_broadcast(draw, cx, cy, s, filled):
+    """Broadcast/signal glyph for the AI Insights 'External Insights' section toggle —
+    represents text arriving from an outside source (MCP tool / Stream Deck action) rather than
+    being generated in-app: a solid dot with concentric arcs curving above it, open at the
+    bottom (same dome convention as draw_gauge), the universal wifi/broadcast shape. `filled`
+    thickens the stroke and adds a 3rd, outer arc for the "on" (visible) state."""
+    dot_r = s * 0.05
+    dot_cy = cy + s * 0.16
+    draw.ellipse([cx - dot_r, dot_cy - dot_r, cx + dot_r, dot_cy + dot_r], fill=WHITE)
+    lw = max(3, int(s * (0.055 if filled else 0.04)))
+    radii = (s * 0.16, s * 0.27, s * 0.38) if filled else (s * 0.16, s * 0.27)
+    for r in radii:
+        bbox = [cx - r, dot_cy - r, cx + r, dot_cy + r]
+        draw.arc(bbox, start=200, end=340, fill=WHITE, width=lw)
+
+
+def draw_bars(draw, cx, cy, s, filled):
+    """Vertical-bars glyph for the AI Insights 'Token Usage' section toggle — a small bar chart
+    (3 bars of increasing height), the universal 'usage/stats' shape. `filled` draws solid bars
+    for the "on" (visible) state; the "off" state draws outline-only bars."""
+    bar_w = s * 0.14
+    gap = s * 0.08
+    heights = (s * 0.22, s * 0.34, s * 0.46)
+    base_y = cy + s * 0.24
+    lw = max(2, int(s * 0.035))
+    total_w = bar_w * 3 + gap * 2
+    left = cx - total_w / 2
+    for i, h in enumerate(heights):
+        x0 = left + i * (bar_w + gap)
+        x1 = x0 + bar_w
+        y0 = base_y - h
+        if filled:
+            draw.rounded_rectangle([x0, y0, x1, base_y], radius=bar_w * 0.2, fill=WHITE)
+        else:
+            draw.rounded_rectangle([x0, y0, x1, base_y], radius=bar_w * 0.2, outline=WHITE, width=lw)
+
+
 # ── Per-action icon builders ────────────────────────────────────────────────────────────────
 
 def build(name, states):
@@ -423,6 +484,26 @@ def gen_all_actions():
         "fast": ("red",    lambda d, x, y, s: draw_gauge(d, x, y, s, needle_deg=60)),
         "none": (None,     lambda d, x, y, s: draw_gauge(d, x, y, s, needle_deg=None)),
         "icon": (None,     lambda d, x, y, s: draw_gauge(d, x, y, s, needle_deg=None)),
+    })
+    build("toggle-insights-questions", {
+        "off":  (None,  lambda d, x, y, s: draw_question_mark(d, x, y, s, filled=False)),
+        "on":   ("sky", lambda d, x, y, s: draw_question_mark(d, x, y, s, filled=True)),
+        "icon": ("sky", lambda d, x, y, s: draw_question_mark(d, x, y, s, filled=True)),
+    })
+    build("toggle-insights-external", {
+        "off":  (None,   lambda d, x, y, s: draw_broadcast(d, x, y, s, filled=False)),
+        "on":   ("lime", lambda d, x, y, s: draw_broadcast(d, x, y, s, filled=True)),
+        "icon": ("lime", lambda d, x, y, s: draw_broadcast(d, x, y, s, filled=True)),
+    })
+    build("toggle-insights-pacing", {
+        "off":  (None,      lambda d, x, y, s: draw_gauge(d, x, y, s, needle_deg=None)),
+        "on":   ("emerald", lambda d, x, y, s: draw_gauge(d, x, y, s, needle_deg=0)),
+        "icon": ("emerald", lambda d, x, y, s: draw_gauge(d, x, y, s, needle_deg=0)),
+    })
+    build("toggle-insights-tokens", {
+        "off":  (None,       lambda d, x, y, s: draw_bars(d, x, y, s, filled=False)),
+        "on":   ("fuchsia",  lambda d, x, y, s: draw_bars(d, x, y, s, filled=True)),
+        "icon": ("fuchsia",  lambda d, x, y, s: draw_bars(d, x, y, s, filled=True)),
     })
 
 

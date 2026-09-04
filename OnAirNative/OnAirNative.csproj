@@ -11,7 +11,7 @@
          Get-Item .VersionInfo.ProductVersion) reflects the actual release number instead of
          defaulting to 1.0.0+<git-sha>. Keep in sync with AboutTabViewModel.Version and
          installer\onair-native.nsi's PRODUCT_VERSION on every release. -->
-    <Version>2.0.0</Version>
+    <Version>2.0.1</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- Embeds the icon into OnAirNative.exe (Explorer, shortcuts, Alt-Tab default).
          The windows also call AppWindow.SetIcon at runtime (see WindowService.SetWindowIcon)
