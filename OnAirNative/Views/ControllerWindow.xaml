@@ -428,6 +428,55 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Card: Q&A session recording — a session is a live-appended Markdown
+                         transcript of every Q&A turn, entirely separate from the conversation
+                         memory below (that's what the AI remembers; this is a durable file
+                         record). Never created automatically — the user must click "Start new
+                         session". Starting one always makes a brand-new file AND clears the
+                         conversation memory (another client/conversation inherits nothing).
+                         "Close session" stops recording to the current file WITHOUT starting a
+                         new one — the only other way to stop besides closing the whole app.
+                         Placed right after RECORDING since both concern the SAME recording
+                         action — this card just decides whether it's also durably saved. -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Q&amp;A SESSION RECORDING" Style="{StaticResource CardTitleStyle}"/>
+
+                            <TextBlock x:Name="QaSessionStatusText"
+                                       FontSize="13"
+                                       TextWrapping="Wrap"
+                                       Text="No active session."/>
+
+                            <TextBlock Text="Session label (optional)" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBox x:Name="QaSessionLabelBox" PlaceholderText="e.g. 'Contoso'"/>
+
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0"
+                                        Content="Start new session"
+                                        HorizontalAlignment="Stretch"
+                                        Click="StartNewQaSession_Click"/>
+                                <Button Grid.Column="1"
+                                        x:Name="CloseQaSessionBtn"
+                                        Content="Close session"
+                                        HorizontalAlignment="Stretch"
+                                        IsEnabled="False"
+                                        Click="CloseQaSession_Click"/>
+                            </Grid>
+                            <Button Content="Open sessions folder"
+                                    HorizontalAlignment="Stretch"
+                                    Click="OpenQaSessionsFolder_Click"/>
+
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="Starting a new session always creates a fresh file and clears the conversation memory below — nothing carries over between sessions. Close session stops recording without starting a new one."/>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Card: AI provider -->
                     <Border Style="{StaticResource CardBorderStyle}">
                         <StackPanel Spacing="10">
@@ -590,52 +639,6 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Card: Q&A session recording — a session is a live-appended Markdown
-                         transcript of every Q&A turn, entirely separate from the conversation
-                         memory above (that's what the AI remembers; this is a durable file
-                         record). Never created automatically — the user must click "Start new
-                         session". Starting one always makes a brand-new file AND clears the
-                         conversation memory (another client/conversation inherits nothing).
-                         "Close session" stops recording to the current file WITHOUT starting a
-                         new one — the only other way to stop besides closing the whole app. -->
-                    <Border Style="{StaticResource CardBorderStyle}">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="Q&amp;A SESSION RECORDING" Style="{StaticResource CardTitleStyle}"/>
-
-                            <TextBlock x:Name="QaSessionStatusText"
-                                       FontSize="13"
-                                       TextWrapping="Wrap"
-                                       Text="No active session."/>
-
-                            <TextBlock Text="Session label (optional)" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                            <TextBox x:Name="QaSessionLabelBox" PlaceholderText="e.g. 'Contoso'"/>
-
-                            <Grid ColumnSpacing="8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0"
-                                        Content="Start new session"
-                                        HorizontalAlignment="Stretch"
-                                        Click="StartNewQaSession_Click"/>
-                                <Button Grid.Column="1"
-                                        x:Name="CloseQaSessionBtn"
-                                        Content="Close session"
-                                        HorizontalAlignment="Stretch"
-                                        IsEnabled="False"
-                                        Click="CloseQaSession_Click"/>
-                            </Grid>
-                            <Button Content="Open sessions folder"
-                                    HorizontalAlignment="Stretch"
-                                    Click="OpenQaSessionsFolder_Click"/>
-
-                            <TextBlock FontSize="12"
-                                       Opacity="0.7"
-                                       TextWrapping="Wrap"
-                                       Text="Starting a new session always creates a fresh file and clears the conversation memory above — nothing carries over between sessions. Close session stops recording without starting a new one."/>
-                        </StackPanel>
-                    </Border>
                 </StackPanel>
 
                 <!-- ── Settings Tab ────────────────────────────────────── -->
