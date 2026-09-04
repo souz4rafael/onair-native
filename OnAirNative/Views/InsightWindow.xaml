@@ -12,10 +12,14 @@
         built the exact same way (WindowService.MakeTransparent/SetClickThrough/etc. — see
         InsightWindow.xaml.cs), but its own window. That means it can be freely dragged, resized
         and shown/hidden without ever touching the TP, and both can be open side by side at the
-        same time. Hosts ONLY the Copilot-insight text an external MCP agent pushes (see
-        App.ShowInsightRemote / onair_show_insight) — nothing else lives here, so there's never
-        ambiguity between "what I should tell the client" (the TP/Q&A answer) and "a private
-        heads-up from my copilot" (this window).
+        same time. This is the ONE place all AI-generated meta-info lives: the Copilot-insight
+        text an external MCP agent pushes (App.ShowInsightRemote / onair_show_insight), the
+        pacing (words-per-minute) coach, the running token-usage summary, and follow-up question
+        suggestions — previously scattered across the TP's Q&A view and the Controller/Web
+        Remote's "AI Insights" tab, now consolidated here so there's never ambiguity between
+        "what I should tell the client" (the TP/Q&A answer) and "AI meta-info for me, the
+        presenter" (this window). The Controller/Web Remote AI Insights tabs stay control-only
+        (open/lock/hide, appearance, on/off toggles) — no live values duplicated there anymore.
     -->
     <Grid x:Name="RootGrid" Background="Transparent">
         <Grid.RowDefinitions>
@@ -54,19 +58,91 @@
             </Border>
         </Grid>
 
-        <!-- ═══ Content: the insight text, at full readable size and scrollable ═ -->
+        <!-- ═══ Content: insight text + AI meta-info, scrollable ═══════════ -->
         <ScrollViewer Grid.Row="1"
                       Background="{StaticResource OverlayBgBrush}"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollMode="Enabled">
-            <TextBlock x:Name="InsightTextBlock"
-                       Foreground="#F0F0F0"
-                       FontSize="16"
-                       LineHeight="24"
-                       TextWrapping="Wrap"
-                       Padding="16,12"
-                       Text="No insights yet"/>
+            <StackPanel Padding="16,12" Spacing="14">
+                <!-- ─── Follow-up question suggestions ("Questions") — TOP of the window (see
+                     user feedback: these are what the presenter scans for first, right after an
+                     answer lands). Moved here from the TP (former
+                     OverlayWindow.FollowUpSuggestionsPanel) and the Controller's (now-removed)
+                     FOLLOW-UP SUGGESTIONS card. Always visible (header + either the suggestion
+                     list or a muted placeholder), same "always there" convention as Pacing/Token
+                     Usage below — visibility as a WHOLE section is instead controlled by
+                     OverlayViewModel.ShowFollowUpsInInsights (a pure display toggle, independent
+                     of AppConfig.ShowFollowUpSuggestions which controls whether suggestions are
+                     generated at all). Plain, non-interactive text lines built in code-behind
+                     from OverlayViewModel.FollowUpSuggestions: short questions the PRESENTER could
+                     ask THEIR CLIENT next. ─── -->
+                <StackPanel x:Name="FollowUpSectionPanel" Spacing="4">
+                    <TextBlock Text="QUESTIONS"
+                               Foreground="#8A8AA0"
+                               FontSize="11"
+                               FontWeight="SemiBold"/>
+                    <StackPanel x:Name="FollowUpSuggestionsPanel" Spacing="4"/>
+                </StackPanel>
+
+                <!-- ─── Insight text — the free text an external MCP/plugin agent pushes (see
+                     App.ShowInsightRemote / onair_show_insight). Sits below the follow-up
+                     suggestions, above the footer (Pacing/Token Usage): this is the main,
+                     presenter-facing content of the window. Separator line above it matches the
+                     Pacing/Token Usage footer sections below, so all areas are visually divided
+                     the same way. Visibility toggled in code-behind by OverlayViewModel.
+                     ShowExternalInsightsInInsights (a pure display toggle — the text itself is
+                     always received/stored regardless). ─── -->
+                <StackPanel x:Name="ExternalInsightSectionPanel" Spacing="4">
+                    <Border Height="1" Background="#FFFFFF1A" Margin="0,0,0,6"/>
+                    <TextBlock Text="EXTERNAL AI INSIGHTS"
+                               Foreground="#8A8AA0"
+                               FontSize="11"
+                               FontWeight="SemiBold"/>
+                    <TextBlock x:Name="InsightTextBlock"
+                               Foreground="#F0F0F0"
+                               FontSize="16"
+                               LineHeight="24"
+                               TextWrapping="Wrap"
+                               Text="No external AI insights yet"/>
+                </StackPanel>
+
+                <!-- ─── Footer: Pacing (Block 5 coach) — less relevant than the content above, so
+                     it lives at the bottom. Same data OverlayViewModel.PacingSummary/PacingLevel
+                     already fed the Controller's (now-removed) PACING card. Visibility toggled in
+                     code-behind by OverlayViewModel.ShowPacingInInsights (a pure display toggle —
+                     pacing itself is always computed regardless). ─── -->
+                <StackPanel x:Name="PacingSectionPanel" Spacing="4">
+                    <Border Height="1" Background="#FFFFFF1A" Margin="0,0,0,6"/>
+                    <TextBlock Text="PACING"
+                               Foreground="#8A8AA0"
+                               FontSize="11"
+                               FontWeight="SemiBold"/>
+                    <TextBlock x:Name="PacingSummaryTextBlock"
+                               Foreground="#C0C0D0"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               Text="No pacing data yet."/>
+                </StackPanel>
+
+                <!-- ─── Footer: Token usage (this session) — same text AiChatService/
+                     AiTabViewModel.UsageSummary already computed for the Controller's TOKEN USAGE
+                     card. Read-only here; the Reset button stays in the Controller/Web Remote AI
+                     Insights tab (a control action, not a value). Visibility toggled in
+                     code-behind by OverlayViewModel.ShowTokenUsageInInsights. ─── -->
+                <StackPanel x:Name="TokenUsageSectionPanel" Spacing="4">
+                    <Border Height="1" Background="#FFFFFF1A" Margin="0,0,0,6"/>
+                    <TextBlock Text="TOKEN USAGE"
+                               Foreground="#8A8AA0"
+                               FontSize="11"
+                               FontWeight="SemiBold"/>
+                    <TextBlock x:Name="UsageSummaryTextBlock"
+                               Foreground="#C0C0D0"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               Text="No calls yet this session."/>
+                </StackPanel>
+            </StackPanel>
         </ScrollViewer>
     </Grid>
 </Window>

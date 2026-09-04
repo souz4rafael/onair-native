@@ -88,8 +88,11 @@ public partial class App : Application
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} ControllerWindow created\n");
         // AI Insights window — a separate, freely resizable panel independent from the TP (see
         // Views/InsightWindow.xaml). Observes _overlay.ViewModel directly rather than owning its
-        // own copy of the insight state.
-        _insightWindow = new InsightWindow(_overlay.ViewModel);
+        // own copy of the insight state. Takes AiChat (not AiTabViewModel/ControllerViewModel)
+        // for its token-usage display, since ControllerViewModel doesn't exist yet at this point
+        // (it's only created in ControllerWindow.InitViewModel, on first Activate) — AiChat is
+        // already fully constructed above, so there's no ordering issue.
+        _insightWindow = new InsightWindow(_overlay.ViewModel, AiChat);
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} InsightWindow created\n");
 
         // Wire overlay → controller reference for cross-window commands
@@ -165,7 +168,22 @@ public partial class App : Application
             Audio.Dispose();
             Whisper.Dispose();
             AiChat.Dispose();
+
+            // Explicitly close every other top-level window — Application.Exit() below does not
+            // reliably tear down independently-Activate()'d Window instances in this unpackaged
+            // WinAppSDK app (observed: it closed InsightWindow but left OverlayWindow/the TP
+            // running after the Controller closed). Best-effort/try-catch since a window may
+            // already be in a partially torn-down state by the time this runs.
+            try { _overlay?.Close(); } catch { /* best-effort */ }
+            try { _insightWindow?.Close(); } catch { /* best-effort */ }
+
             Exit();
+
+            // Hard-stop fallback: everything above (state saved, services disposed, windows
+            // asked to close, Exit() requested) already happened, so it's safe to guarantee the
+            // process itself actually terminates instead of relying on Exit()'s own async
+            // shutdown to reliably tear down every window/thread.
+            Environment.Exit(0);
         };
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} LaunchCore done\n");
     }

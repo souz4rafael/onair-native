@@ -66,6 +66,48 @@ public partial class OverlayViewModel : ObservableObject
     /// Stream Deck's color-coded pacing tile) don't need to parse a sentence.</summary>
     [ObservableProperty] private string _pacingLevel  = "None";
 
+    // Pure display toggles for the AI Insights window's four sections (Questions/External
+    // Insights/Pacing/Token Usage) — NOT opt-in-computation toggles like ShowFollowUpSuggestions
+    // below (pacing/usage/external-insight-text are always computed/tracked/received regardless,
+    // see PacingSummary's comment above and InsightText's own doc comment). Live here on
+    // OverlayViewModel (rather than AiTabViewModel/InsightsTabViewModel, the more "natural" home)
+    // specifically because InsightWindow is constructed before ControllerWindow.InitViewModel()
+    // creates those tab ViewModels, so it can only ever react to state on the OverlayViewModel/
+    // AiChatService it's given at construction — see InsightWindow's own doc comment. Own their
+    // persistence directly (unlike Opacity/FontSize/FontFamily above, which are mirrored FROM
+    // ScrollTabViewModel) since there's no separate tab-owned counterpart for these four.
+    [ObservableProperty] private bool _showPacingInInsights = true;
+    [ObservableProperty] private bool _showTokenUsageInInsights = true;
+    [ObservableProperty] private bool _showFollowUpsInInsights = true;
+    [ObservableProperty] private bool _showExternalInsightsInInsights = true;
+
+    partial void OnShowPacingInInsightsChanged(bool value)
+    {
+        _config.Current.ShowPacingInInsights = value;
+        _config.Save();
+    }
+
+    partial void OnShowTokenUsageInInsightsChanged(bool value)
+    {
+        _config.Current.ShowTokenUsageInInsights = value;
+        _config.Save();
+    }
+
+    /// <summary>Independent of <see cref="ShowFollowUpSuggestions"/> config (which instead
+    /// controls whether suggestions are generated at all) — this only hides/shows the Questions
+    /// section in the AI Insights window.</summary>
+    partial void OnShowFollowUpsInInsightsChanged(bool value)
+    {
+        _config.Current.ShowFollowUpsInInsights = value;
+        _config.Save();
+    }
+
+    partial void OnShowExternalInsightsInInsightsChanged(bool value)
+    {
+        _config.Current.ShowExternalInsightsInInsights = value;
+        _config.Save();
+    }
+
     // Conversation memory across consecutive Q&A recordings — each successful answer appends
     // a turn here, and it's passed back into every subsequent GetAnswerAsync call so follow-up
     // questions ("and what about pricing?") resolve correctly instead of being answered in
@@ -240,6 +282,11 @@ public partial class OverlayViewModel : ObservableObject
         FontSize   = a.FontSize;
         FontColor  = a.FontColor;
         FontFamily = a.FontFamily;
+
+        ShowPacingInInsights     = config.Current.ShowPacingInInsights;
+        ShowTokenUsageInInsights = config.Current.ShowTokenUsageInInsights;
+        ShowFollowUpsInInsights        = config.Current.ShowFollowUpsInInsights;
+        ShowExternalInsightsInInsights = config.Current.ShowExternalInsightsInInsights;
     }
 
     // ── Scroll mode changes ───────────────────────────────────────────────────

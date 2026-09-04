@@ -128,17 +128,6 @@
                                Text=""
                                Visibility="Collapsed"/>
 
-                    <!-- Follow-up question suggestions (Block 2, opt-in via Settings) — plain,
-                         non-interactive text lines (NOT buttons) built in code-behind from
-                         OverlayViewModel.FollowUpSuggestions: short questions the PRESENTER
-                         could ask THEIR CLIENT next, to keep the conversation flowing (a
-                         sales/conversation-flow aid). Non-interactive both because the TP is
-                         frequently click-through/locked during live use, and because the
-                         presenter just reads/says these aloud themselves — there's nothing to
-                         click. Empty/collapsed whenever there are no suggestions (feature off,
-                         or none returned). -->
-                    <StackPanel x:Name="FollowUpSuggestionsPanel" Spacing="4"/>
-
                     <!-- Busy indicator -->
                     <ProgressRing x:Name="QaBusy"
                                   IsActive="False"

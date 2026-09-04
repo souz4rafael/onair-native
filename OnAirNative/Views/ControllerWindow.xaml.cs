@@ -173,10 +173,6 @@ public sealed partial class ControllerWindow : Window
                 WhisperModelStatusText.Text = ViewModel.AiTab.WhisperModelStatus;
                 WhisperLoadUnloadBtn.Content = App.Whisper.IsLocalModelLoaded ? "Unload" : "Load";
             }
-            else if (e.PropertyName == nameof(ViewModels.AiTabViewModel.UsageSummary))
-            {
-                UsageSummaryText.Text = ViewModel.AiTab.UsageSummary;
-            }
         };
 
         // Update check/install status → About tab UI
@@ -219,10 +215,6 @@ public sealed partial class ControllerWindow : Window
         // Same pattern for the Settings → KNOWLEDGE BASE file list.
         ViewModel.AiTab.KnowledgeBaseFiles.CollectionChanged += (_, _) => PopulateKnowledgeBaseFiles();
 
-        // AI Insights tab's FOLLOW-UP SUGGESTIONS card — same source collection as the TP's own
-        // FollowUpSuggestionsPanel (OverlayWindow.xaml.cs.PopulateFollowUpSuggestions).
-        Overlay.ViewModel.FollowUpSuggestions.CollectionChanged += (_, _) => PopulateInsightFollowUpSuggestions();
-
         // Sync LockToggle when move mode changes (e.g., via Ctrl+Alt+Home hotkey).
         // Setting IsChecked (not just calling SyncLockToggle) keeps the button's actual
         // toggle state in sync with its label — otherwise a hotkey-driven change would
@@ -236,15 +228,6 @@ public sealed partial class ControllerWindow : Window
                 UpdateConversationTurnCountText();
             else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.QaSessionStatusText))
                 UpdateQaSessionStatusText();
-            else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.PacingSummary))
-                PacingSummaryText.Text = Overlay.ViewModel.PacingSummary;
-            // AI Insights tab's Q&A RECAP card — same source data as the TP's own QaQuestionText/
-            // QaAnswerText (OverlayWindow.xaml.cs), just mirrored into the Controller tab so the
-            // presenter (or someone reviewing the Controller alone) can see the last Q&A turn.
-            else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.QaQuestion))
-                InsightQaQuestionText.Text = string.IsNullOrEmpty(Overlay.ViewModel.QaQuestion) ? "(none yet)" : Overlay.ViewModel.QaQuestion;
-            else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.QaAnswer))
-                InsightQaAnswerText.Text = string.IsNullOrEmpty(Overlay.ViewModel.QaAnswer) ? "(none yet)" : Overlay.ViewModel.QaAnswer;
             // Block 6: push an immediate state broadcast (rather than waiting up to 2s for the
             // safety-net timer) the instant any of these change — a monitoring MCP agent polling
             // QaTurnCount, or a live WS observer waiting on the insight footer or the Stream
@@ -283,10 +266,8 @@ public sealed partial class ControllerWindow : Window
             MaxTokensSlider.Maximum = 2000;
             MaxTokensSlider.Value   = ViewModel.AiTab.MaxTokens;
             ShowFollowUpSuggestionsCheckBox.IsChecked = ViewModel.AiTab.ShowFollowUpSuggestions;
-            UsageSummaryText.Text   = ViewModel.AiTab.UsageSummary;
             UpdateConversationTurnCountText();
             UpdateQaSessionStatusText();
-            PacingSummaryText.Text  = Overlay?.ViewModel.PacingSummary ?? "No pacing data yet.";
 
             // Scroll tab — set ranges THEN values.
             // Must be inside _populatingUi guard: setting Minimum causes WinUI 3 to clamp
@@ -325,11 +306,13 @@ public sealed partial class ControllerWindow : Window
             PopulateInsightFontFamilies();
             InsightCustomColorBox.Text = App.Config.Current.InsightAppearance.FontColor;
 
-            // AI Insights tab — Q&A recap + follow-up suggestions, seeded with whatever the TP
-            // is already showing (both start empty on a fresh app launch).
-            InsightQaQuestionText.Text = string.IsNullOrEmpty(Overlay?.ViewModel.QaQuestion) ? "(none yet)" : Overlay!.ViewModel.QaQuestion;
-            InsightQaAnswerText.Text   = string.IsNullOrEmpty(Overlay?.ViewModel.QaAnswer)   ? "(none yet)" : Overlay!.ViewModel.QaAnswer;
-            PopulateInsightFollowUpSuggestions();
+            // AI Insights tab — pure display toggles for the floating InsightWindow's footer
+            // (Pacing/Token Usage) and top section (Follow-up Suggestions). Values are always
+            // computed regardless — these only control whether the InsightWindow shows them.
+            ShowPacingCheckBox.IsChecked      = Overlay?.ViewModel.ShowPacingInInsights ?? true;
+            ShowTokenUsageCheckBox.IsChecked  = Overlay?.ViewModel.ShowTokenUsageInInsights ?? true;
+            ShowFollowUpsInInsightsCheckBox.IsChecked = Overlay?.ViewModel.ShowFollowUpsInInsights ?? true;
+            ShowExternalInsightsCheckBox.IsChecked    = Overlay?.ViewModel.ShowExternalInsightsInInsights ?? true;
 
             // About
             VersionText.Text = $"v{ViewModel.AboutTab.Version}";
@@ -977,9 +960,16 @@ public sealed partial class ControllerWindow : Window
         InsightFontFamily       = ViewModel.InsightsTab.FontFamily,
         ShowFollowUpSuggestions = ViewModel.AiTab.ShowFollowUpSuggestions,
         ConversationTurnCount   = Overlay?.ViewModel.ConversationTurnCount ?? 0,
+        ConversationHistory     = Overlay?.ViewModel.ConversationTurns
+                                      .Select(t => new ConversationTurnState { Question = t.UserText, Answer = t.AssistantText })
+                                      .ToList() ?? [],
         UsageSummary            = ViewModel.AiTab.UsageSummary,
         StealthEmbedded         = _embedService.IsEmbedding,
         StealthEmbedTitle       = _embedService.TargetTitle,
+        ShowPacingInInsights     = Overlay?.ViewModel.ShowPacingInInsights ?? true,
+        ShowTokenUsageInInsights = Overlay?.ViewModel.ShowTokenUsageInInsights ?? true,
+        ShowFollowUpsInInsights        = Overlay?.ViewModel.ShowFollowUpsInInsights ?? true,
+        ShowExternalInsightsInInsights = Overlay?.ViewModel.ShowExternalInsightsInInsights ?? true,
     };
 
     /// <summary>Applies an absolute setter value by field name — the MCP server's write path.
@@ -1141,6 +1131,54 @@ public sealed partial class ControllerWindow : Window
                     finally { _populatingUi = false; }
                     return (true, null);
                 }
+                case "ShowPacingInInsights":
+                {
+                    var v = value.GetBoolean();
+                    _populatingUi = true;
+                    try
+                    {
+                        if (Overlay is not null) Overlay.ViewModel.ShowPacingInInsights = v;
+                        ShowPacingCheckBox.IsChecked = v;
+                    }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
+                case "ShowTokenUsageInInsights":
+                {
+                    var v = value.GetBoolean();
+                    _populatingUi = true;
+                    try
+                    {
+                        if (Overlay is not null) Overlay.ViewModel.ShowTokenUsageInInsights = v;
+                        ShowTokenUsageCheckBox.IsChecked = v;
+                    }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
+                case "ShowFollowUpsInInsights":
+                {
+                    var v = value.GetBoolean();
+                    _populatingUi = true;
+                    try
+                    {
+                        if (Overlay is not null) Overlay.ViewModel.ShowFollowUpsInInsights = v;
+                        ShowFollowUpsInInsightsCheckBox.IsChecked = v;
+                    }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
+                case "ShowExternalInsightsInInsights":
+                {
+                    var v = value.GetBoolean();
+                    _populatingUi = true;
+                    try
+                    {
+                        if (Overlay is not null) Overlay.ViewModel.ShowExternalInsightsInInsights = v;
+                        ShowExternalInsightsCheckBox.IsChecked = v;
+                    }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
                 default:
                     return (false, $"Unknown field: {field}");
             }
@@ -1198,11 +1236,97 @@ public sealed partial class ControllerWindow : Window
         ViewModel.AiTab.ShowFollowUpSuggestions = ShowFollowUpSuggestionsCheckBox.IsChecked == true;
     }
 
+    /// <summary>Pure display toggles for the AI Insights overlay's footer — pacing/usage are
+    /// always computed regardless (see OverlayViewModel.ShowPacingInInsights's doc comment), so
+    /// these only control whether InsightWindow shows them.</summary>
+    private void ShowPacingCheckBox_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_populatingUi) return;
+        if (Overlay is not null) Overlay.ViewModel.ShowPacingInInsights = ShowPacingCheckBox.IsChecked == true;
+    }
+
+    private void ShowTokenUsageCheckBox_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_populatingUi) return;
+        if (Overlay is not null) Overlay.ViewModel.ShowTokenUsageInInsights = ShowTokenUsageCheckBox.IsChecked == true;
+    }
+
+    /// <summary>Pure display toggle for the Questions (follow-up suggestions) section —
+    /// independent of ShowFollowUpSuggestionsCheckBox_Toggled above (which instead controls
+    /// whether suggestions are generated at all).</summary>
+    private void ShowFollowUpsInInsightsCheckBox_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_populatingUi) return;
+        if (Overlay is not null) Overlay.ViewModel.ShowFollowUpsInInsights = ShowFollowUpsInInsightsCheckBox.IsChecked == true;
+    }
+
+    private void ShowExternalInsightsCheckBox_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_populatingUi) return;
+        if (Overlay is not null) Overlay.ViewModel.ShowExternalInsightsInInsights = ShowExternalInsightsCheckBox.IsChecked == true;
+    }
+
     private void ResetUsage_Click(object sender, RoutedEventArgs e) =>
         ViewModel.AiTab.ResetUsageCommand.Execute(null);
 
     private void ClearConversation_Click(object sender, RoutedEventArgs e) =>
         Overlay?.ViewModel.ClearConversationCommand.Execute(null);
+
+    /// <summary>Shows the remembered Q&amp;A turns (OverlayViewModel.ConversationTurns) in a
+    /// popup — replaces the old always-visible "Q&amp;A RECAP" card (which only ever showed the
+    /// LAST turn) with an on-demand view of the FULL remembered history (up to
+    /// OverlayViewModel.MaxConversationTurns turns) the AI actually uses as context for
+    /// follow-up questions.</summary>
+    private async void ViewConversationMemory_Click(object sender, RoutedEventArgs e)
+    {
+        var turns = Overlay?.ViewModel.ConversationTurns;
+        var listPanel = new StackPanel { Spacing = 12 };
+
+        if (turns is null || turns.Count == 0)
+        {
+            listPanel.Children.Add(new TextBlock
+            {
+                Text         = "No conversation turns remembered yet.",
+                Opacity      = 0.7,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+        else
+        {
+            foreach (var turn in turns)
+            {
+                var turnPanel = new StackPanel { Spacing = 4 };
+                turnPanel.Children.Add(new TextBlock
+                {
+                    Text         = $"Q: {turn.UserText}",
+                    TextWrapping = TextWrapping.Wrap,
+                    FontWeight   = Microsoft.UI.Text.FontWeights.SemiBold,
+                });
+                turnPanel.Children.Add(new TextBlock
+                {
+                    Text         = $"A: {turn.AssistantText}",
+                    TextWrapping = TextWrapping.Wrap,
+                    Opacity      = 0.85,
+                });
+                listPanel.Children.Add(turnPanel);
+            }
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot        = Content.XamlRoot,
+            Title           = "Conversation memory",
+            Content         = new ScrollViewer
+            {
+                Content                       = listPanel,
+                MaxHeight                      = 420,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            },
+            CloseButtonText = "Close",
+            DefaultButton   = ContentDialogButton.Close,
+        };
+        await dialog.ShowAsync();
+    }
 
     private void UpdateConversationTurnCountText()
     {
@@ -1462,28 +1586,6 @@ public sealed partial class ControllerWindow : Window
 
         var current = ViewModel.InsightsTab.FontFamily;
         InsightFontFamilyCombo.SelectedItem = installed.Contains(current) ? current : installed.FirstOrDefault();
-    }
-
-    /// <summary>Rebuilds the AI Insights tab's follow-up-suggestion lines from
-    /// OverlayViewModel.FollowUpSuggestions — same source collection and text pattern as
-    /// OverlayWindow.xaml.cs's PopulateFollowUpSuggestions (the TP's own copy), just mirrored
-    /// here so the presenter can review the same list from the Controller tab.</summary>
-    private void PopulateInsightFollowUpSuggestions()
-    {
-        InsightFollowUpSuggestionsPanel.Children.Clear();
-        var suggestions = Overlay?.ViewModel.FollowUpSuggestions;
-        if (suggestions is null || suggestions.Count == 0) return;
-
-        foreach (var suggestion in suggestions)
-        {
-            InsightFollowUpSuggestionsPanel.Children.Add(new TextBlock
-            {
-                Text         = $"•  {suggestion}",
-                FontSize     = 13,
-                TextWrapping = TextWrapping.Wrap,
-                Opacity      = 0.85,
-            });
-        }
     }
 
     private void ResetSettings_Click(object sender, RoutedEventArgs e)

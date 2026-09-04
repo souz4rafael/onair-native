@@ -144,7 +144,6 @@
 
   // ── Rendering ──────────────────────────────────────────────────────────
 
-  const PACING_COLORS = { None: "#78808a", Slow: "#eab308", Good: "#16a34a", Fast: "#dc2626" };
   const QA_SESSION_COLORS = { true: "#16a34a", false: "#78808a" };
 
   function setToggle(id, active) {
@@ -164,6 +163,10 @@
     setToggle("btnRecording", s.recording);
     setToggle("btnCtrlHide", s.controllerHiddenInShare);
     setToggle("btnShowFollowUps", s.showFollowUpSuggestions);
+    setToggle("btnShowPacing", s.showPacingInInsights);
+    setToggle("btnShowTokenUsage", s.showTokenUsageInInsights);
+    setToggle("btnShowFollowUpsInInsights", s.showFollowUpsInInsights);
+    setToggle("btnShowExternalInsights", s.showExternalInsightsInInsights);
 
     $("valFontSize").textContent = s.fontSize;
     $("valOpacity").textContent = Math.round(s.opacity) + "%";
@@ -177,15 +180,10 @@
     $("valInsFontSize").textContent = s.insightFontSize;
     $("valInsOpacity").textContent = Math.round(s.insightOpacity) + "%";
     $("valInsightText").textContent = s.insightText || "(none)";
-    $("valQuestion").textContent = s.lastQuestion || "--";
-    $("valAnswer").textContent = s.lastAnswer || "--";
     $("valConvTurns").textContent = s.conversationTurnCount ?? "--";
-    $("valUsageSummary").textContent = s.usageSummary || "--";
-
-    const badge = $("pacingBadge");
-    badge.textContent = s.pacingLevel || "None";
-    badge.style.backgroundColor = PACING_COLORS[s.pacingLevel] || PACING_COLORS.None;
-    $("valPacingSummary").textContent = s.pacingSummary || "";
+    // Conversation modal (#convModal) reads lastState.conversationHistory on demand (see
+    // wireConversationModal below) rather than re-rendering here — it's only visible when the
+    // presenter explicitly taps "View Conversation".
 
     const qaBadge = $("qaSessionBadge");
     qaBadge.textContent = s.qaSessionActive ? "Active" : "Inactive";
@@ -203,22 +201,6 @@
     // but the selected value needs to track every state push in case another client changes it.
     if ($("fontFamilyTp").options.length) $("fontFamilyTp").value = s.fontFamily;
     if ($("fontFamilyIns").options.length) $("fontFamilyIns").value = s.insightFontFamily;
-
-    const list = $("followUpList");
-    list.innerHTML = "";
-    const suggestions = s.followUpSuggestions || [];
-    if (suggestions.length === 0) {
-      const li = document.createElement("li");
-      li.className = "empty-hint";
-      li.textContent = "No suggestions yet";
-      list.appendChild(li);
-    } else {
-      suggestions.forEach((q) => {
-        const li = document.createElement("li");
-        li.textContent = q;
-        list.appendChild(li);
-      });
-    }
 
     $("valStealthStatus").textContent = s.stealthEmbedded
       ? `🔒 Embedded — ${s.stealthEmbedTitle || "window"}`
@@ -422,6 +404,51 @@
     connect(pin);
   }
 
+  // ── Conversation memory modal (Q&A tab's "View Conversation" button) ───
+  // Full remembered Q&A history (RemoteState.ConversationHistory) is only fetched/rendered on
+  // demand — the compact turn COUNT (#valConvTurns) already renders on every state push, but the
+  // actual question/answer text only matters once the presenter explicitly asks to see it.
+
+  function renderConversationModal() {
+    const body = $("convModalBody");
+    body.innerHTML = "";
+    const turns = (lastState && lastState.conversationHistory) || [];
+
+    if (turns.length === 0) {
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = "No conversation turns remembered yet.";
+      body.appendChild(p);
+      return;
+    }
+
+    turns.forEach((turn) => {
+      const wrap = document.createElement("div");
+      wrap.className = "conv-turn";
+      const q = document.createElement("p");
+      q.className = "q";
+      q.textContent = `Q: ${turn.question}`;
+      const a = document.createElement("p");
+      a.className = "a";
+      a.textContent = `A: ${turn.answer}`;
+      wrap.appendChild(q);
+      wrap.appendChild(a);
+      body.appendChild(wrap);
+    });
+  }
+
+  function wireConversationModal() {
+    $("btnViewConversation").addEventListener("click", () => {
+      renderConversationModal();
+      $("convModal").classList.remove("hidden");
+    });
+    $("btnCloseConvModal").addEventListener("click", () => $("convModal").classList.add("hidden"));
+    // Click on the dimmed backdrop (not the card itself) also dismisses it.
+    $("convModal").addEventListener("click", (e) => {
+      if (e.target === $("convModal")) $("convModal").classList.add("hidden");
+    });
+  }
+
   // ── Bootstrap ──────────────────────────────────────────────────────────
 
   wireTabs();
@@ -431,6 +458,7 @@
   wireColorApply();
   wireFontFamilySelects();
   wireStealthTab();
+  wireConversationModal();
 
   // A "Copy Link" URL from Settings carries ?pin=... — auto-connect and strip it from the
   // visible address bar (so it doesn't linger in browser history / on-screen during a share).

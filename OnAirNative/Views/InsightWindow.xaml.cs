@@ -1,5 +1,7 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using OnAirNative.Services;
 using OnAirNative.ViewModels;
 using OnAirNative.Win32;
@@ -9,21 +11,32 @@ namespace OnAirNative.Views;
 /// <summary>
 /// The "AI Insights" window — a second always-on-top transparent overlay, independent from the
 /// TP (<see cref="OverlayWindow"/>), so both can be shown/hidden/resized/moved separately and be
-/// open at the same time. Deliberately owns NO state of its own: it reads
-/// <see cref="OverlayViewModel.InsightText"/> from the SAME <see cref="OverlayViewModel"/>
+/// open at the same time. This is the SINGLE place all AI-generated meta-info is displayed: the
+/// Copilot-insight text an external MCP agent pushes, the pacing (words-per-minute) coach, the
+/// running token-usage summary, and follow-up question suggestions — the TP and the Controller/
+/// Web Remote "AI Insights" tabs no longer render any of these live values (they keep only
+/// controls: open/lock/hide, appearance, on/off toggles, the usage-reset button).
+/// Reads <see cref="OverlayViewModel.InsightText"/>/<see cref="OverlayViewModel.PacingSummary"/>/
+/// <see cref="OverlayViewModel.FollowUpSuggestions"/> from the SAME <see cref="OverlayViewModel"/>
 /// instance the TP uses (passed in via the constructor), so
 /// <see cref="App.ShowInsightRemote"/>/<see cref="App.ClearInsightRemote"/> (and therefore
 /// onair_show_insight/onair_clear_insight over MCP) keep working completely unchanged — only the
-/// display surface changed, not the write path.
+/// display surface changed, not the write path. Token usage is read directly from the shared
+/// <see cref="AiChatService"/> singleton (rather than via AiTabViewModel/ControllerViewModel)
+/// purely for constructor-ordering reasons: App.xaml.cs constructs this window BEFORE the
+/// Controller's ViewModel exists (ControllerViewModel is only created in
+/// ControllerWindow.InitViewModel, on first Activate), while AiChatService (App.AiChat) is
+/// already fully constructed at that point.
 /// </summary>
 public sealed partial class InsightWindow : Window
 {
     private readonly OverlayViewModel _sharedViewModel;
+    private readonly AiChatService    _aiChat;
     private IntPtr _hwnd;
     private bool   _isLocked;
     private string _fontColorHex = "#F0F0F0";
 
-    private const string PlaceholderText = "No insights yet";
+    private const string PlaceholderText = "No external AI insights yet";
 
     // Fixed default position, distinct from the TP's own fixed (0,0) default (see
     // OverlayWindow.OnFirstActivated) so the two windows don't stack directly on top of each
@@ -32,17 +45,43 @@ public sealed partial class InsightWindow : Window
     private const double DefaultX = 820;
     private const double DefaultY = 40;
 
-    public InsightWindow(OverlayViewModel sharedViewModel)
+    public InsightWindow(OverlayViewModel sharedViewModel, AiChatService aiChat)
     {
         InitializeComponent();
         _sharedViewModel = sharedViewModel;
+        _aiChat          = aiChat;
 
         _sharedViewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(OverlayViewModel.InsightText))
                 UpdateInsightText();
+            else if (e.PropertyName == nameof(OverlayViewModel.PacingSummary))
+                UpdatePacingSummary();
+            else if (e.PropertyName == nameof(OverlayViewModel.ShowPacingInInsights))
+                UpdatePacingVisibility();
+            else if (e.PropertyName == nameof(OverlayViewModel.ShowTokenUsageInInsights))
+                UpdateTokenUsageVisibility();
+            else if (e.PropertyName == nameof(OverlayViewModel.ShowFollowUpsInInsights))
+                UpdateFollowUpVisibility();
+            else if (e.PropertyName == nameof(OverlayViewModel.ShowExternalInsightsInInsights))
+                UpdateExternalInsightVisibility();
         };
+        // FollowUpSuggestions is an ObservableCollection, not a property — same pattern as
+        // OverlayWindow's own (now-removed) subscription used.
+        _sharedViewModel.FollowUpSuggestions.CollectionChanged += (_, _) => PopulateFollowUpSuggestions();
         UpdateInsightText();
+        UpdatePacingSummary();
+        UpdatePacingVisibility();
+        UpdateTokenUsageVisibility();
+        UpdateFollowUpVisibility();
+        UpdateExternalInsightVisibility();
+        PopulateFollowUpSuggestions();
+
+        // Token usage — refreshed after every chat call (and after a manual reset), same trigger
+        // AiTabViewModel.RefreshUsageSummary reacts to; this mirrors that method's exact string
+        // format so both stay consistent even though they're now two independent computations.
+        _aiChat.UsageChanged += (_, _) => UpdateUsageSummary();
+        UpdateUsageSummary();
 
         Activated += OnFirstActivated;
     }
@@ -54,6 +93,80 @@ public sealed partial class InsightWindow : Window
         InsightTextBlock.Foreground = string.IsNullOrEmpty(text)
             ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 112, 112, 138))
             : ParseHexColor(_fontColorHex);
+    }
+
+    private void UpdatePacingSummary() => PacingSummaryTextBlock.Text = _sharedViewModel.PacingSummary;
+
+    /// <summary>Shows/hides the footer's Pacing section per OverlayViewModel.
+    /// ShowPacingInInsights — a pure display toggle, pacing itself is always computed
+    /// regardless (see that property's doc comment).</summary>
+    private void UpdatePacingVisibility() =>
+        PacingSectionPanel.Visibility = _sharedViewModel.ShowPacingInInsights ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Shows/hides the footer's Token Usage section per OverlayViewModel.
+    /// ShowTokenUsageInInsights — a pure display toggle, usage itself is always tracked
+    /// regardless.</summary>
+    private void UpdateTokenUsageVisibility() =>
+        TokenUsageSectionPanel.Visibility = _sharedViewModel.ShowTokenUsageInInsights ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Shows/hides the top Questions (follow-up suggestions) section per
+    /// OverlayViewModel.ShowFollowUpsInInsights — a pure display toggle, independent of
+    /// AppConfig.ShowFollowUpSuggestions (which instead controls whether suggestions are
+    /// generated at all).</summary>
+    private void UpdateFollowUpVisibility() =>
+        FollowUpSectionPanel.Visibility = _sharedViewModel.ShowFollowUpsInInsights ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Shows/hides the External AI Insights section per OverlayViewModel.
+    /// ShowExternalInsightsInInsights — a pure display toggle, the pushed text itself is always
+    /// received/stored regardless (see <see cref="UpdateInsightText"/>).</summary>
+    private void UpdateExternalInsightVisibility() =>
+        ExternalInsightSectionPanel.Visibility = _sharedViewModel.ShowExternalInsightsInInsights ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Mirrors AiTabViewModel.RefreshUsageSummary's exact text format (see that method's
+    /// doc comment) — kept as a separate computation from the same AiChatService counters rather
+    /// than sharing AiTabViewModel directly, for the constructor-ordering reason explained in
+    /// this class's own doc comment.</summary>
+    private void UpdateUsageSummary()
+    {
+        UsageSummaryTextBlock.Text = _aiChat.TotalCalls == 0
+            ? "No calls yet this session."
+            : $"{_aiChat.TotalCalls} call{(_aiChat.TotalCalls == 1 ? "" : "s")} — " +
+              $"{_aiChat.TotalPromptTokens:N0} prompt + {_aiChat.TotalCompletionTokens:N0} completion = " +
+              $"{_aiChat.TotalPromptTokens + _aiChat.TotalCompletionTokens:N0} tokens total";
+    }
+
+    /// <summary>Rebuilds the follow-up-suggestion text lines from
+    /// OverlayViewModel.FollowUpSuggestions — moved here near-verbatim from OverlayWindow.xaml.cs
+    /// (formerly the TP's own PopulateFollowUpSuggestions). Plain, non-interactive TextBlocks
+    /// (deliberately NOT buttons — see FollowUpSuggestions' own doc comment for why). Always
+    /// renders at least a muted placeholder line when empty — the static "QUESTIONS" header lives
+    /// in XAML now (FollowUpSectionPanel), so this always-something behavior matches Pacing/Token
+    /// Usage's own "no data yet" placeholders instead of collapsing to nothing.</summary>
+    private void PopulateFollowUpSuggestions()
+    {
+        FollowUpSuggestionsPanel.Children.Clear();
+
+        if (_sharedViewModel.FollowUpSuggestions.Count == 0)
+        {
+            FollowUpSuggestionsPanel.Children.Add(new TextBlock
+            {
+                Text       = "No suggestions yet.",
+                FontSize   = 13,
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 144, 144, 160)),
+            });
+            return;
+        }
+
+        foreach (var suggestion in _sharedViewModel.FollowUpSuggestions)
+        {
+            FollowUpSuggestionsPanel.Children.Add(new TextBlock
+            {
+                Text         = $"•  {suggestion}",
+                FontSize     = 14,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground   = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 144, 144, 160)),
+            });
+        }
     }
 
     // ── Appearance (independent from the TP — see InsightsTabViewModel/InsightAppearanceConfig) ─

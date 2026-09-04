@@ -47,9 +47,6 @@ public sealed partial class OverlayWindow : Window
         // Wire ViewModel events → Win32 calls
         ViewModel.ClickThroughChanged   += OnClickThroughChanged;
         ViewModel.JumpToBlockRequested  += (_, blockIndex) => JumpToBlock(blockIndex);
-        // FollowUpSuggestions is an ObservableCollection, not a property — mirrors
-        // ScrollTabViewModel.Chapters' own CollectionChanged pattern in ControllerWindow.
-        ViewModel.FollowUpSuggestions.CollectionChanged += (_, _) => PopulateFollowUpSuggestions();
         ViewModel.PropertyChanged            += (_, e) =>
         {
             switch (e.PropertyName)
@@ -352,37 +349,6 @@ public sealed partial class OverlayWindow : Window
         var transform = target.TransformToVisual(ScriptBlocksPanel);
         var point     = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
         ViewModel.ScrollOffset = Math.Max(0, point.Y);
-    }
-
-    /// <summary>Rebuilds the follow-up-suggestion text lines from
-    /// OverlayViewModel.FollowUpSuggestions — plain, non-interactive TextBlocks (deliberately
-    /// NOT buttons — see FollowUpSuggestions' own doc comment for why: the TP is frequently
-    /// click-through/locked during live use, and these are questions for the PRESENTER to ask
-    /// their client aloud, not something to click/activate). A small header line appears only
-    /// when there's at least one suggestion to show.</summary>
-    private void PopulateFollowUpSuggestions()
-    {
-        FollowUpSuggestionsPanel.Children.Clear();
-        if (ViewModel.FollowUpSuggestions.Count == 0) return;
-
-        FollowUpSuggestionsPanel.Children.Add(new TextBlock
-        {
-            Text       = "You could ask them:",
-            FontSize   = 13,
-            FontStyle  = Windows.UI.Text.FontStyle.Italic,
-            Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 144, 144, 160)), // matches QaQuestionText's muted tone
-        });
-
-        foreach (var suggestion in ViewModel.FollowUpSuggestions)
-        {
-            FollowUpSuggestionsPanel.Children.Add(new TextBlock
-            {
-                Text          = $"•  {suggestion}",
-                FontSize      = 14,
-                TextWrapping  = TextWrapping.Wrap,
-                Foreground    = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 144, 144, 160)),
-            });
-        }
     }
 
     // ── Hex color helper ─────────────────────────────────────────────────────

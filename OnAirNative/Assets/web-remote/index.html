@@ -147,11 +147,6 @@
     </section>
 
     <section class="card">
-      <h2>Suggestions</h2>
-      <button id="btnShowFollowUps" class="toggle-btn wide" data-toggle-field="ShowFollowUpSuggestions">Suggest questions to ask the client</button>
-    </section>
-
-    <section class="card">
       <h2>Q&amp;A Session</h2>
       <p><span id="qaSessionBadge" class="badge">--</span></p>
       <div class="row">
@@ -163,7 +158,10 @@
     <section class="card">
       <h2>Conversation Memory</h2>
       <p class="hint">Turns remembered: <span id="valConvTurns">--</span></p>
-      <button data-cmd="ClearConversation" class="toggle-btn wide">Clear Conversation</button>
+      <div class="row">
+        <button id="btnViewConversation" class="toggle-btn wide">View Conversation</button>
+        <button data-cmd="ClearConversation" class="toggle-btn wide">Clear Conversation</button>
+      </div>
     </section>
   </div>
 
@@ -187,12 +185,6 @@
         <span id="valInsOpacity">--</span>
         <button data-setstep="InsightOpacity:5">+</button>
       </div>
-      <textarea id="insightInput" placeholder="Push a private note to the Insights panel…" rows="2"></textarea>
-      <div class="row">
-        <button id="btnInsightSend">Send</button>
-        <button id="btnInsightClear">Clear</button>
-      </div>
-      <p class="hint">Current: <span id="valInsightText">(none)</span></p>
     </section>
 
     <section class="card">
@@ -214,25 +206,36 @@
     </section>
 
     <section class="card">
-      <h2>Token Usage</h2>
-      <p class="hint" id="valUsageSummary">--</p>
-      <button data-cmd="ResetUsage" class="toggle-btn wide">Reset Usage</button>
+      <h2>Follow-up Suggestions</h2>
+      <button id="btnShowFollowUps" class="toggle-btn wide" data-toggle-field="ShowFollowUpSuggestions">Suggest questions to ask the client</button>
+      <p class="hint">Only takes effect in Q&amp;A mode.</p>
+      <button id="btnShowFollowUpsInInsights" class="toggle-btn wide" data-toggle-field="ShowFollowUpsInInsights">Show Questions section in AI Insights</button>
+      <p class="hint">Pure display toggle, independent of the setting above — shown at the top of the AI Insights overlay.</p>
+    </section>
+
+    <section class="card">
+      <h2>External AI Insights</h2>
+      <textarea id="insightInput" placeholder="Push a private note to the Insights panel…" rows="2"></textarea>
+      <div class="row">
+        <button id="btnInsightSend">Send</button>
+        <button id="btnInsightClear">Clear</button>
+      </div>
+      <p class="hint">Current: <span id="valInsightText">(none)</span></p>
+      <button id="btnShowExternalInsights" class="toggle-btn wide" data-toggle-field="ShowExternalInsightsInInsights">Show external AI insights in AI Insights</button>
+      <p class="hint">Free text pushed from an external tool (e.g. onair_show_insight over MCP). Shown below Questions in the AI Insights overlay.</p>
     </section>
 
     <section class="card">
       <h2>Pacing</h2>
-      <p><span id="pacingBadge" class="badge">--</span> <span id="valPacingSummary"></span></p>
+      <button id="btnShowPacing" class="toggle-btn wide" data-toggle-field="ShowPacingInInsights">Show pacing coach in AI Insights</button>
+      <p class="hint">Words-per-minute coaching shown in the AI Insights overlay's footer after each answer.</p>
     </section>
 
     <section class="card">
-      <h2>Q&amp;A Recap</h2>
-      <p class="hint">Q: <span id="valQuestion">--</span></p>
-      <p class="hint">A: <span id="valAnswer">--</span></p>
-    </section>
-
-    <section class="card">
-      <h2>Follow-up Suggestions</h2>
-      <ul id="followUpList"></ul>
+      <h2>Token Usage</h2>
+      <button id="btnShowTokenUsage" class="toggle-btn wide" data-toggle-field="ShowTokenUsageInInsights">Show token usage in AI Insights</button>
+      <p class="hint">Live count shown in the AI Insights overlay window's footer.</p>
+      <button data-cmd="ResetUsage" class="toggle-btn wide">Reset Usage</button>
     </section>
   </div>
 
@@ -264,6 +267,18 @@
   <footer>
     <button id="btnForget" class="link-btn">Forget this device</button>
   </footer>
+</div>
+
+<div id="convModal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Conversation Memory</h2>
+      <button id="btnCloseConvModal" class="modal-close">✕</button>
+    </div>
+    <div id="convModalBody" class="modal-body">
+      <p class="hint">No conversation turns remembered yet.</p>
+    </div>
+  </div>
 </div>
 
 <script src="app.js"></script>

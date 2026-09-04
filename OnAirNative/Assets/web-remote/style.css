@@ -228,9 +228,6 @@ textarea {
   background: var(--gray);
 }
 
-#followUpList { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-secondary); }
-#followUpList .empty-hint { list-style: none; margin-left: -18px; font-style: italic; opacity: .7; }
-
 /* ── Appearance card: color swatches, custom hex, font family ─────────── */
 
 .swatch-row { display: flex; gap: 8px; margin-bottom: 10px; }
@@ -335,3 +332,65 @@ footer { text-align: center; padding-top: 8px; }
   cursor: pointer;
   font-size: 12px;
 }
+
+/* ── Conversation memory modal (View Conversation button, Q&A tab) ─────── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1000;
+}
+
+.modal-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.modal-header h2 {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--accent);
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.modal-body {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.conv-turn { margin-bottom: 14px; }
+.conv-turn:last-child { margin-bottom: 0; }
+.conv-turn .q { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+.conv-turn .a { font-size: 13px; color: var(--text-secondary); margin: 0; }

@@ -71,14 +71,37 @@ public sealed class RemoteState
     /// via "clearInsight" / onair_clear_insight. Empty means no insight is currently shown.</summary>
     public string InsightText              { get; set; } = "";
     /// <summary>Mirrors <c>AppConfig.ShowFollowUpSuggestions</c> — settable via SetRemoteField
-    /// ("ShowFollowUpSuggestions") so a remote client can toggle the Q&amp;A tab's "Suggest
+    /// ("ShowFollowUpSuggestions") so a remote client can toggle the AI Insights tab's "Suggest
     /// questions to ask the client" checkbox without opening the Controller.</summary>
     public bool   ShowFollowUpSuggestions  { get; set; }
+    /// <summary>Mirrors <c>OverlayViewModel.ShowPacingInInsights</c> — settable via SetRemoteField
+    /// ("ShowPacingInInsights") so a remote client can toggle whether the AI Insights window shows
+    /// its Pacing section, without opening the Controller. Pure display toggle — pacing is always
+    /// computed regardless.</summary>
+    public bool   ShowPacingInInsights     { get; set; }
+    /// <summary>Mirrors <c>OverlayViewModel.ShowTokenUsageInInsights</c> — settable via
+    /// SetRemoteField ("ShowTokenUsageInInsights"), same rationale as
+    /// <see cref="ShowPacingInInsights"/> but for the Token Usage section.</summary>
+    public bool   ShowTokenUsageInInsights { get; set; }
+    /// <summary>Mirrors <c>OverlayViewModel.ShowFollowUpsInInsights</c> — settable via
+    /// SetRemoteField ("ShowFollowUpsInInsights"), same rationale as
+    /// <see cref="ShowPacingInInsights"/> but for the Questions (follow-up suggestions) section.
+    /// Independent of <see cref="ShowFollowUpSuggestions"/> (which instead controls whether
+    /// suggestions are generated at all).</summary>
+    public bool   ShowFollowUpsInInsights        { get; set; }
+    /// <summary>Mirrors <c>OverlayViewModel.ShowExternalInsightsInInsights</c> — settable via
+    /// SetRemoteField ("ShowExternalInsightsInInsights"), same rationale as
+    /// <see cref="ShowPacingInInsights"/> but for the External AI Insights section.</summary>
+    public bool   ShowExternalInsightsInInsights { get; set; }
     /// <summary>How many Q&amp;A turns the AI currently remembers (see
     /// <c>OverlayViewModel.ConversationTurnCount</c>), capped at 6 — separate from
     /// <see cref="QaTurnCount"/>'s all-time monotonic counter. Zero after "Clear conversation" or
     /// starting a new Q&amp;A session.</summary>
     public int    ConversationTurnCount    { get; set; }
+    /// <summary>The actual Q&amp;A pairs behind <see cref="ConversationTurnCount"/> (see
+    /// <c>OverlayViewModel.ConversationTurns</c>) — lets a remote client show a "view
+    /// conversation" popup instead of just the count. Same 6-turn cap, oldest first.</summary>
+    public List<ConversationTurnState> ConversationHistory { get; set; } = [];
     /// <summary>Human-readable token usage summary for this session (see
     /// <c>AiTabViewModel.UsageSummary</c>) — same text shown in the Controller's USAGE card.</summary>
     public string UsageSummary             { get; set; } = "";
@@ -115,6 +138,15 @@ public sealed class RemoteState
     public bool   StealthEmbedded          { get; set; }
     /// <summary>Title of the currently embedded window, if any (see <see cref="StealthEmbedded"/>).</summary>
     public string StealthEmbedTitle        { get; set; } = "";
+}
+
+/// <summary>One remembered Q&amp;A pair for <see cref="RemoteState.ConversationHistory"/> — mirrors
+/// <c>OnAirNative.Core.Services.ChatTurn</c>'s two strings under names matching the Controller's
+/// existing LastQuestion/LastAnswer convention.</summary>
+public sealed class ConversationTurnState
+{
+    public string Question { get; set; } = "";
+    public string Answer   { get; set; } = "";
 }
 
 /// <summary>

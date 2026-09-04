@@ -569,15 +569,6 @@
 
                             <TextBlock Text="Max tokens per answer" Style="{ThemeResource CaptionTextBlockStyle}"/>
                             <Slider x:Name="MaxTokensSlider" ValueChanged="MaxTokensSlider_ValueChanged"/>
-
-                            <CheckBox x:Name="ShowFollowUpSuggestionsCheckBox"
-                                      Content="Suggest questions to ask the client"
-                                      Checked="ShowFollowUpSuggestionsCheckBox_Toggled"
-                                      Unchecked="ShowFollowUpSuggestionsCheckBox_Toggled"/>
-                            <TextBlock FontSize="12"
-                                       Opacity="0.7"
-                                       TextWrapping="Wrap"
-                                       Text="After each answer, asks the AI (a separate, minimal call — extra usage) for 2-3 questions YOU could ask the client next to keep the conversation flowing. Shown as plain text on the TP (not clickable)."/>
                         </StackPanel>
                     </Border>
 
@@ -623,9 +614,20 @@
                                        Opacity="0.7"
                                        TextWrapping="Wrap"
                                        Text="Follow-up questions in the same session build on prior Q&amp;A automatically (last 6 turns). Clear if you want the next question answered with no memory of earlier ones."/>
-                            <Button Content="Clear conversation"
-                                    HorizontalAlignment="Stretch"
-                                    Click="ClearConversation_Click"/>
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0"
+                                        Content="View conversation"
+                                        HorizontalAlignment="Stretch"
+                                        Click="ViewConversationMemory_Click"/>
+                                <Button Grid.Column="1"
+                                        Content="Clear conversation"
+                                        HorizontalAlignment="Stretch"
+                                        Click="ClearConversation_Click"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
 
@@ -718,63 +720,82 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Card: Pacing (moved from Q&A) -->
-                    <Border Style="{StaticResource CardBorderStyle}">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="PACING" Style="{StaticResource CardTitleStyle}"/>
-                            <TextBlock Text="Pacing (last answer)" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="PacingSummaryText"
-                                       FontSize="13"
-                                       TextWrapping="Wrap"
-                                       Text="No pacing data yet."/>
-                            <TextBlock FontSize="12"
-                                       Opacity="0.7"
-                                       TextWrapping="Wrap"
-                                       Text="A rough words-per-minute estimate for your last recorded question, based on actual speaking time (pauses excluded). A gentle guide, not a strict rule — presenter-side only, never shown on the TP."/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Card: Token usage (moved from Q&A) -->
-                    <Border Style="{StaticResource CardBorderStyle}">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="TOKEN USAGE" Style="{StaticResource CardTitleStyle}"/>
-                            <TextBlock Text="Token usage (this session)" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="UsageSummaryText"
-                                       FontSize="13"
-                                       TextWrapping="Wrap"/>
-                            <Button Content="Reset usage counter"
-                                    HorizontalAlignment="Stretch"
-                                    Click="ResetUsage_Click"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Card: Q&A recap -->
-                    <Border Style="{StaticResource CardBorderStyle}">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="Q&amp;A RECAP" Style="{StaticResource CardTitleStyle}"/>
-                            <TextBlock Text="Last question" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="InsightQaQuestionText"
-                                       FontSize="13"
-                                       TextWrapping="Wrap"
-                                       Opacity="0.85"
-                                       Text="No question yet."/>
-                            <TextBlock Text="Last answer" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="InsightQaAnswerText"
-                                       FontSize="13"
-                                       TextWrapping="Wrap"
-                                       Text="No answer yet."/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Card: Follow-up suggestions -->
+                    <!-- Card: Follow-up suggestions ("Questions" in the AI Insights overlay —
+                         generation moved here from the Q&amp;A tab; only takes effect while the
+                         app is in Q&amp;A mode, since that's the only mode that generates answers
+                         to suggest follow-ups from). Ordered first among the four content cards
+                         below to match the AI Insights overlay's own top-to-bottom order:
+                         Questions → External AI Insights → Pacing → Token Usage. -->
                     <Border Style="{StaticResource CardBorderStyle}">
                         <StackPanel Spacing="10">
                             <TextBlock Text="FOLLOW-UP SUGGESTIONS" Style="{StaticResource CardTitleStyle}"/>
+                            <CheckBox x:Name="ShowFollowUpSuggestionsCheckBox"
+                                      Content="Suggest questions to ask the client"
+                                      Checked="ShowFollowUpSuggestionsCheckBox_Toggled"
+                                      Unchecked="ShowFollowUpSuggestionsCheckBox_Toggled"/>
                             <TextBlock FontSize="12"
                                        Opacity="0.7"
                                        TextWrapping="Wrap"
-                                       Text="Enable 'Suggest questions to ask the client' in the Q&amp;A tab's Prompts card to populate this after each answer."/>
-                            <StackPanel x:Name="InsightFollowUpSuggestionsPanel" Spacing="4"/>
+                                       Text="Only takes effect in Q&amp;A mode. After each answer, asks the AI (a separate, minimal call — extra usage) for 2-3 questions YOU could ask the client next to keep the conversation flowing."/>
+                            <CheckBox x:Name="ShowFollowUpsInInsightsCheckBox"
+                                      Content="Show Questions section in AI Insights"
+                                      Checked="ShowFollowUpsInInsightsCheckBox_Toggled"
+                                      Unchecked="ShowFollowUpsInInsightsCheckBox_Toggled"/>
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="Pure display toggle, independent of the setting above — shown at the top of the AI Insights overlay."/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: External AI insights — the free text an external MCP/plugin agent
+                         pushes via onair_show_insight (or the Web Remote's manual push box).
+                         Pure display toggle; the text itself is always received/stored
+                         regardless (see OverlayViewModel.InsightText). -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="EXTERNAL AI INSIGHTS" Style="{StaticResource CardTitleStyle}"/>
+                            <CheckBox x:Name="ShowExternalInsightsCheckBox"
+                                      Content="Show external AI insights in AI Insights"
+                                      Checked="ShowExternalInsightsCheckBox_Toggled"
+                                      Unchecked="ShowExternalInsightsCheckBox_Toggled"/>
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="Free text pushed from an external tool (e.g. onair_show_insight over MCP, or the Web Remote's push box). Shown below Questions in the AI Insights overlay."/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Pacing coach -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="PACING" Style="{StaticResource CardTitleStyle}"/>
+                            <CheckBox x:Name="ShowPacingCheckBox"
+                                      Content="Show pacing coach in AI Insights"
+                                      Checked="ShowPacingCheckBox_Toggled"
+                                      Unchecked="ShowPacingCheckBox_Toggled"/>
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="Words-per-minute coaching shown in the AI Insights overlay's footer after each answer."/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Token usage -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="TOKEN USAGE" Style="{StaticResource CardTitleStyle}"/>
+                            <CheckBox x:Name="ShowTokenUsageCheckBox"
+                                      Content="Show token usage in AI Insights"
+                                      Checked="ShowTokenUsageCheckBox_Toggled"
+                                      Unchecked="ShowTokenUsageCheckBox_Toggled"/>
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="Live count shown in the AI Insights overlay window's footer."/>
+                            <Button Content="Reset usage counter"
+                                    HorizontalAlignment="Stretch"
+                                    Click="ResetUsage_Click"/>
                         </StackPanel>
                     </Border>
 

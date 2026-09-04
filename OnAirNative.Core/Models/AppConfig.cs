@@ -185,6 +185,32 @@ public class AppConfig
     /// extra billed API call per question, opt-in rather than a surprise cost increase.</summary>
     public bool ShowFollowUpSuggestions { get; set; } = false;
 
+    /// <summary>Whether the AI Insights window shows its Pacing section. A pure display toggle —
+    /// pacing is always computed regardless (see OverlayViewModel.PacingSummary's doc comment).
+    /// On by default since this section already always showed before the toggle existed; this
+    /// only adds the ability to opt out.</summary>
+    public bool ShowPacingInInsights { get; set; } = true;
+
+    /// <summary>Whether the AI Insights window shows its Token Usage section. A pure display
+    /// toggle — usage is always tracked regardless. On by default for the same reason as
+    /// <see cref="ShowPacingInInsights"/>.</summary>
+    public bool ShowTokenUsageInInsights { get; set; } = true;
+
+    /// <summary>Whether the AI Insights window shows its Questions (follow-up suggestions)
+    /// section. A pure display toggle, independent of <see cref="ShowFollowUpSuggestions"/>
+    /// (which controls whether suggestions are generated at all) — mirrors
+    /// <see cref="ShowPacingInInsights"/> exactly. On by default so a fresh install shows all
+    /// four AI Insights sections consistently (each with its own "nothing yet" placeholder)
+    /// until the presenter opts out of one.</summary>
+    public bool ShowFollowUpsInInsights { get; set; } = true;
+
+    /// <summary>Whether the AI Insights window shows its External AI Insights section (the free
+    /// text pushed via onair_show_insight / an external MCP agent, or the Web Remote's manual
+    /// push box). A pure display toggle — the text itself is always received/stored regardless
+    /// (see OverlayViewModel.InsightText). On by default, same reasoning as
+    /// <see cref="ShowPacingInInsights"/>.</summary>
+    public bool ShowExternalInsightsInInsights { get; set; } = true;
+
     /// <summary>Free-text custom vocabulary/glossary — product names, jargon, acronyms, spellings
     /// the presenter wants transcription and chat answers to get right (e.g. "Contoso, Northwind
     /// Traders, SKU-4471"). Injected as-is into BOTH: (1) the Whisper transcription "prompt" bias
