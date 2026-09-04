@@ -70,6 +70,18 @@ public sealed class RemoteState
     /// Script and Q&amp;A modes) — set via the "showInsight" op / onair_show_insight tool, cleared
     /// via "clearInsight" / onair_clear_insight. Empty means no insight is currently shown.</summary>
     public string InsightText              { get; set; } = "";
+    /// <summary>Mirrors <c>AppConfig.ShowFollowUpSuggestions</c> — settable via SetRemoteField
+    /// ("ShowFollowUpSuggestions") so a remote client can toggle the Q&amp;A tab's "Suggest
+    /// questions to ask the client" checkbox without opening the Controller.</summary>
+    public bool   ShowFollowUpSuggestions  { get; set; }
+    /// <summary>How many Q&amp;A turns the AI currently remembers (see
+    /// <c>OverlayViewModel.ConversationTurnCount</c>), capped at 6 — separate from
+    /// <see cref="QaTurnCount"/>'s all-time monotonic counter. Zero after "Clear conversation" or
+    /// starting a new Q&amp;A session.</summary>
+    public int    ConversationTurnCount    { get; set; }
+    /// <summary>Human-readable token usage summary for this session (see
+    /// <c>AiTabViewModel.UsageSummary</c>) — same text shown in the Controller's USAGE card.</summary>
+    public string UsageSummary             { get; set; } = "";
 
     // ── AI Insights window (separate resizable Controller-tab-driven window) ─────────────────
     // Mirrors the equivalent TP fields above (TpOpen/TpLocked/TpHiddenInShare/FontSize/Opacity/
@@ -92,6 +104,17 @@ public sealed class RemoteState
     public double InsightOpacity           { get; set; }
     /// <summary>Font family of the AI Insights window's text.</summary>
     public string InsightFontFamily        { get; set; } = "";
+
+    // ── App Stealth (window embed) — Web Remote only ──────────────────────────
+    // Mirrors WindowEmbedService.IsEmbedding/TargetTitle so a reconnecting Web Remote client can
+    // show the current embed status immediately, without waiting for another state push. Not
+    // surfaced on the Stream Deck/MCP loopback server — a dynamic per-window picker doesn't suit
+    // a physical button or a headless tool call, so this stays Web-Remote-exclusive for now.
+
+    /// <summary>Whether a window is currently embedded in the App Stealth container.</summary>
+    public bool   StealthEmbedded          { get; set; }
+    /// <summary>Title of the currently embedded window, if any (see <see cref="StealthEmbedded"/>).</summary>
+    public string StealthEmbedTitle        { get; set; } = "";
 }
 
 /// <summary>

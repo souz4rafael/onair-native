@@ -103,6 +103,24 @@ public class InsightAppearanceConfig
     public string FontFamily { get; set; } = "Segoe UI";
 }
 
+/// <summary>Settings for the Web Remote — a second, LAN-reachable HttpListener
+/// (WebRemoteService, wildcard-bound, port 47824) that serves a small static control page so a
+/// phone/tablet/other PC on the same network can control onAIr, same as the Stream Deck plugin
+/// does locally. Deliberately separate from <see cref="AppConfig.RemoteControlEnabled"/>'s
+/// loopback-only server (port 47823) — that one's trust model is "any process running as this
+/// Windows user"; this one is reachable from other devices, so it additionally requires a PIN
+/// and a one-time Windows URL-ACL grant (see WebRemoteService for details). Off by default —
+/// unlike the loopback server, this genuinely opens a network-facing listener.</summary>
+public class WebRemoteConfig
+{
+    public bool   Enabled { get; set; } = false;
+    /// <summary>6-digit numeric PIN required on every WebSocket connection attempt (as a
+    /// <c>?pin=</c> query parameter). Generated lazily on first enable if blank. Regenerating it
+    /// (Settings → WEB REMOTE → Regenerate) instantly invalidates every previously paired
+    /// device — there is no server-side session list, the live PIN value IS the credential.</summary>
+    public string Pin { get; set; } = "";
+}
+
 // ── Persisted window geometry ─────────────────────────────────────────────────
 
 public class WindowState
@@ -223,4 +241,8 @@ public class AppConfig
     /// onAIr MCP server process (mcp-server/OnAirMcp — a different .exe, not this app) before
     /// executing each tool call; see mcp-server/OnAirTools.cs's ToolGate.</summary>
     public List<string> McpDisabledTools { get; set; } = [];
+
+    /// <summary>Web Remote server settings — see <see cref="WebRemoteConfig"/>'s own doc comment.
+    /// Off by default.</summary>
+    public WebRemoteConfig WebRemote { get; set; } = new();
 }

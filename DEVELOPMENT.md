@@ -571,6 +571,90 @@ graceful behavior when onAIr isn't running (clear error, no crash).
 
 ---
 
+## Web Remote (LAN control page)
+
+A third client — no plugin or install required — for controlling onAIr from **any device on the
+same network** (phone, tablet, another PC): `WebRemoteService.cs`, a wildcard-bound
+(`http://+:47824/`) `HttpListener` that serves a small static page (`Assets/web-remote/`) plus a
+WebSocket endpoint reusing the exact same op vocabulary as `RemoteControlService`
+(command/adjust/getState/set/loadScript/getScriptText/listFonts/showInsight/clearInsight), plus 2
+new ops exclusive to this surface (see "App Stealth tab" below). Gated by its own toggle in
+Settings → **WEB REMOTE** (`AppConfig.WebRemote.Enabled`, off by default).
+
+**Security model is stricter than the loopback server's**, since this one is reachable from other
+devices:
+- Every WebSocket upgrade requires a `?pin=` query parameter matching the live 6-digit PIN in
+  `AppConfig.WebRemote.Pin` (generated lazily on first enable; regenerating it — Settings → WEB
+  REMOTE → **Regenerate** — instantly revokes every previously paired device, since there's no
+  server-side session store, just a live PIN comparison on every connection attempt).
+- The static page itself is served unauthenticated (harmless UI chrome, no private data) — only
+  the WebSocket upgrade is PIN-gated.
+- Windows requires either admin elevation or a one-time `netsh http add urlacl` reservation before
+  a non-loopback `HttpListener` prefix can bind at all — handled by `TryGrantUrlAcl`, triggered
+  only from an explicit user gesture (Settings → WEB REMOTE → **Grant Network Access**), never
+  silently at launch.
+
+Deliberately a **separate, standalone class** from `RemoteControlService` rather than a shared
+base — that server is loopback-only, production-critical, and already covered by integration
+tests; duplicating the protocol glue here is a worthwhile tradeoff for zero regression risk to it.
+Keep both protocol implementations in sync by hand when the op vocabulary changes.
+
+### Frontend (`Assets/web-remote/`)
+
+Vanilla HTML/CSS/JS, no build step, no dependencies — `index.html` + `style.css` + `app.js`,
+bundled into the app the same way as the Stream Deck plugin / MCP server folders
+(`<Content Include="Assets\web-remote\**">` in the csproj). A PIN-entry gate on first connect
+(persisted to `localStorage` so returning devices skip straight to the control UI), then a
+4-tab pill bar mirroring the native Controller window's own tabs — **Teleprompter**, **Q&A**,
+**AI Insights**, **App Stealth** — each with the same buttons/sliders/steppers as their native
+counterparts (Open/Close, Lock, Hide in Share, font size/opacity steppers, scroll-mode buttons +
+per-mode step/speed controls, color swatches + hex box, font-family picker, Q&A recap + follow-up
+suggestions, private-note push to AI Insights).
+
+Connection lifecycle: `connect(pin)` opens the WebSocket, `ws.onopen` re-fetches the font list plus
+(on the Stealth tab) the window list, and a 10-second **watchdog** (`resetWatchdog()`) closes and
+reconnects the socket if no message — including the periodic full-state broadcast — arrives in
+that window, so a real network drop or a backgrounded phone browser self-heals instead of leaving
+a dead connection with no indication. `visibilitychange` also forces a reconnect attempt when the
+tab/app is foregrounded again with a stale socket.
+
+**Testing note**: a hand-rolled mocked `WebSocket` in a Playwright script must simulate a
+periodic server push (or the mock's own idle socket gets closed by the client's 10s watchdog
+between slow tool round-trips, which looks like a state-sync bug but is purely a test-harness
+artifact — the real server's periodic broadcasts keep the watchdog naturally satisfied).
+
+### App Stealth tab
+
+The native Controller has a dedicated **App Stealth** tab (window-embed workflow — see the
+"App Stealth" section above); the web remote mirrors it as its own pill tab rather than nesting it
+inside Teleprompter, via 2 new ops exclusive to this surface:
+- `listStealthWindows` → `ControllerWindow.ListStealthWindowsRemote()`, returning a JSON-friendly
+  `RemoteWindowInfo { Id, Display }` per visible top-level window (`Id` is `Handle.ToInt64()` as a
+  decimal string — raw `IntPtr` doesn't round-trip through `System.Text.Json` — `Display` reuses
+  `StealthWindowService.WindowInfo.ToString()` verbatim, so the picker's text exactly matches the
+  native window list).
+- `embedStealthWindow` (`{"windowId":"..."}`) → `EmbedStealthWindowRemote(id)`, which re-resolves
+  the window fresh by handle (rather than trusting a possibly-stale client-side list — a window
+  can close between the remote client's fetch and its embed click) and mirrors
+  `EmbedBtn_Click`'s exact positioning math.
+
+Deliberately **Web-Remote-exclusive** — not mirrored on `RemoteControlService`/Stream Deck/MCP
+(`mcp-server/RemoteState.cs` untouched), since a dynamic per-window picker doesn't suit a physical
+Stream Deck button or a headless tool call. `RemoteState.StealthEmbedded`/`StealthEmbedTitle` exist
+purely to render this tab's status line; see that field's doc comment for the same rationale.
+
+### Follow-up Suggestions empty state + mobile safe-area fix
+
+Two real bugs found on a physical device: an empty `followUpSuggestions` array rendered a
+header-only `<ul>` with no visible body (looked "invisible/cut off" rather than "empty" — fixed
+with an explicit `<li class="empty-hint">No suggestions yet</li>` placeholder), and the `.app`
+container's fixed bottom padding didn't account for iOS Safari's home-indicator safe area, so the
+last card on the page could be partially obscured — fixed with
+`padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px))` plus `viewport-fit=cover` on the
+viewport meta tag (required for `env(safe-area-inset-bottom)` to return non-zero at all).
+
+---
+
 ## AI provider settings redesign (v1.2.0)
 
 **Real bug fixed**: the old single `ProviderConfigDialog` (opened via a "Configure provider…"
@@ -713,6 +797,12 @@ Limited for: Chrome/Edge/modern Chromium (DirectComposition surfaces bypass the 
   decoupled from the Chat/Transcription dropdowns — a real bug fix, not just a refactor); a live
   mic level test in the Settings tab; and preset color swatches now populate the editable hex box
   instead of a separate read-only label.
+- **Web Remote (this session, not yet released):** a third control surface — a LAN-reachable
+  HTML/CSS/JS control page (`WebRemoteService`, port 47824, PIN-gated, off by default) — lets any
+  phone/tablet/PC on the same network control onAIr, mirroring the native Controller's Teleprompter/
+  Q&A/AI Insights/App Stealth tabs (including the App Stealth window-embed workflow via 2
+  Web-Remote-exclusive ops) plus a real fix for an empty Follow-up Suggestions list looking
+  invisible and a mobile Safari safe-area padding bug. See "Web Remote" above.
 - **Known, deferred issue:** the Stream Deck plugin's title-reappearing bug (see "Remote control"
   above) is only partially fixed — 3 specific dual-state toggle keys (Unlock TP/Show TP/Show
   Controller) still show their title once activated, worked around manually for now by the user

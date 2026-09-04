@@ -5,6 +5,7 @@ using OnAirNative.Services;
 using OnAirNative.ViewModels;
 using OnAirNative.Views.Dialogs;
 using OnAirNative.Win32;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace OnAirNative.Views;
 
@@ -153,6 +154,12 @@ public sealed partial class ControllerWindow : Window
             if (enabled) App.Instance.StartRemoteControl();
             else App.Instance.StopRemoteControl();
             UpdateRemoteControlStatusText();
+        };
+        ViewModel.WebRemoteEnabledChanged += (_, enabled) =>
+        {
+            if (enabled) App.Instance.StartWebRemote();
+            else App.Instance.StopWebRemote();
+            UpdateWebRemoteStatusText();
         };
 
         // Local Whisper model load status (Loading…/Model loaded/File not found/Failed) → UI,
@@ -361,6 +368,10 @@ public sealed partial class ControllerWindow : Window
             // Settings tab — Stream Deck remote control
             RemoteControlToggle.IsOn = ViewModel.RemoteControlEnabled;
             UpdateRemoteControlStatusText();
+
+            // Settings tab — Web Remote
+            WebRemoteToggle.IsOn = ViewModel.WebRemoteEnabled;
+            UpdateWebRemoteStatusText();
         }
         finally
         {
@@ -658,6 +669,80 @@ public sealed partial class ControllerWindow : Window
             : (ViewModel.RemoteControlEnabled ? "⚠ Enabled but not running (port busy?)" : "○ Stopped");
     }
 
+    // ── Settings tab — Web Remote ──────────────────────────────────────────────
+
+    private void WebRemoteToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_populatingUi) return;
+        ViewModel.WebRemoteEnabled = WebRemoteToggle.IsOn;
+    }
+
+    /// <summary>Public wrapper for the same reason as <see cref="RefreshRemoteControlStatusText"/>
+    /// — LaunchCore decides whether the server actually started AFTER this window's
+    /// InitViewModel/PopulateStaticUi already ran once.</summary>
+    public void RefreshWebRemoteStatusText() => UpdateWebRemoteStatusText();
+
+    private void UpdateWebRemoteStatusText()
+    {
+        WebRemoteStatusText.Text = App.WebRemote is not null
+            ? $"● Running on port {WebRemoteService.Port}"
+            : App.WebRemoteNeedsElevation
+                ? "⚠ Needs network access — click \"Grant Network Access\" below"
+                : (ViewModel.WebRemoteEnabled ? "⚠ Enabled but not running" : "○ Stopped");
+
+        WebRemotePinText.Text = string.IsNullOrEmpty(App.Config.Current.WebRemote.Pin)
+            ? "——————"
+            : App.Config.Current.WebRemote.Pin;
+
+        GrantWebRemoteAccessBtn.Visibility = App.WebRemoteNeedsElevation
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    /// <summary>Runs the elevated one-time URL-ACL grant (shows a UAC prompt) off the UI thread,
+    /// then retries starting the server and refreshes the status text either way.</summary>
+    private async void GrantWebRemoteAccess_Click(object sender, RoutedEventArgs e)
+    {
+        WebRemoteCopyStatusText.Text = "Requesting network access… (check for a UAC prompt)";
+        var granted = await Task.Run(() => App.Instance.TryGrantWebRemoteAccessAndStart());
+        UpdateWebRemoteStatusText();
+        WebRemoteCopyStatusText.Text = granted
+            ? "✓ Network access granted — Web Remote is now running."
+            : "⚠ Access not granted (UAC declined, or the request failed).";
+    }
+
+    /// <summary>Generates a new PIN and persists it — every previously connected device must
+    /// re-enter the new one, since the server checks it live on every connection attempt.</summary>
+    private void RegenerateWebRemotePin_Click(object sender, RoutedEventArgs e)
+    {
+        App.Config.Current.WebRemote.Pin = WebRemoteService.GeneratePin();
+        App.Config.Save();
+        UpdateWebRemoteStatusText();
+        WebRemoteCopyStatusText.Text = "✓ New PIN generated — previously connected devices must re-enter it.";
+    }
+
+    /// <summary>Copies a ready-to-open URL (LAN IP + PIN) to the clipboard — pasting it into a
+    /// message, or opening it directly on another device, connects instantly (app.js reads the
+    /// `?pin=` query param and strips it from the address bar on first load).</summary>
+    private void CopyWebRemoteLink_Click(object sender, RoutedEventArgs e)
+    {
+        var addresses = WebRemoteService.GetLanAddresses();
+        if (addresses.Count == 0)
+        {
+            WebRemoteCopyStatusText.Text = "⚠ No LAN address found — make sure Wi-Fi/Ethernet is connected.";
+            return;
+        }
+
+        var pin = App.Config.Current.WebRemote.Pin;
+        var url = $"http://{addresses[0]}:{WebRemoteService.Port}/?pin={pin}";
+
+        var package = new DataPackage();
+        package.SetText(url);
+        Clipboard.SetContent(package);
+
+        WebRemoteCopyStatusText.Text = $"✓ Copied {url} to clipboard";
+    }
+
     /// <summary>Installs the bundled onAIr Remote Stream Deck plugin by launching the packaged
     /// .streamDeckPlugin file — identical to a user double-clicking it in Explorer, which hands
     /// off to the Stream Deck app's own install flow (registered as that file extension's
@@ -890,6 +975,11 @@ public sealed partial class ControllerWindow : Window
         InsightFontSize         = ViewModel.InsightsTab.FontSize,
         InsightOpacity          = ViewModel.InsightsTab.Opacity * 100.0,
         InsightFontFamily       = ViewModel.InsightsTab.FontFamily,
+        ShowFollowUpSuggestions = ViewModel.AiTab.ShowFollowUpSuggestions,
+        ConversationTurnCount   = Overlay?.ViewModel.ConversationTurnCount ?? 0,
+        UsageSummary            = ViewModel.AiTab.UsageSummary,
+        StealthEmbedded         = _embedService.IsEmbedding,
+        StealthEmbedTitle       = _embedService.TargetTitle,
     };
 
     /// <summary>Applies an absolute setter value by field name — the MCP server's write path.
@@ -1039,6 +1129,18 @@ public sealed partial class ControllerWindow : Window
                     finally { _populatingUi = false; }
                     return (true, null);
                 }
+                case "ShowFollowUpSuggestions":
+                {
+                    var v = value.GetBoolean();
+                    _populatingUi = true;
+                    try
+                    {
+                        ViewModel.AiTab.ShowFollowUpSuggestions = v;
+                        ShowFollowUpSuggestionsCheckBox.IsChecked = v;
+                    }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
                 default:
                     return (false, $"Unknown field: {field}");
             }
@@ -1175,6 +1277,11 @@ public sealed partial class ControllerWindow : Window
     /// AI Status tile press (via the RecheckWhisperModel remote action).</summary>
     public void RecheckWhisperModel() =>
         ViewModel.AiTab.RecheckWhisperModelCommand.Execute(null);
+
+    /// <summary>Resets the session token usage counter — used by the Web Remote/Stream Deck/MCP
+    /// "ResetUsage" remote action, mirroring the Q&amp;A tab's own "Reset usage counter" button.</summary>
+    public void ResetUsage() =>
+        ViewModel.AiTab.ResetUsageCommand.Execute(null);
 
     // ── About tab ─────────────────────────────────────────────────────────────
 
@@ -1777,6 +1884,48 @@ public sealed partial class ControllerWindow : Window
         EmbedBtn.Visibility        = Visibility.Visible;
         ReleaseEmbedBtn.Visibility = Visibility.Collapsed;
         EmbedBtn.IsEnabled         = _selectedStealthWindow is not null;
+    }
+
+    /// <summary>Small JSON-friendly projection of <see cref="StealthWindowService.WindowInfo"/>
+    /// for the Web Remote's App Stealth tab — the real type carries a native <see cref="IntPtr"/>
+    /// handle that doesn't round-trip through System.Text.Json, so it's serialized as a decimal
+    /// string (<see cref="Id"/>) instead. <see cref="Display"/> reuses
+    /// <see cref="StealthWindowService.WindowInfo.ToString"/> so the remote page's window list
+    /// never needs its own copy of the "Title  [ProcessName]" formatting logic.</summary>
+    public sealed class RemoteWindowInfo
+    {
+        public string Id      { get; init; } = "";
+        public string Display { get; init; } = "";
+    }
+
+    /// <summary>Enumerates visible windows for the Web Remote's App Stealth tab — same source
+    /// list <see cref="PopulateWindowList"/> uses for <see cref="WindowListCombo"/>.</summary>
+    public List<RemoteWindowInfo> ListStealthWindowsRemote() =>
+        StealthWindowService.GetVisibleWindows()
+            .Select(w => new RemoteWindowInfo { Id = w.Handle.ToInt64().ToString(), Display = w.ToString() })
+            .ToList();
+
+    /// <summary>Embeds the window identified by <paramref name="id"/> (as produced by
+    /// <see cref="ListStealthWindowsRemote"/>) — the Web Remote's equivalent of picking a window
+    /// in <see cref="WindowListCombo"/> then pressing <see cref="EmbedBtn"/>. Re-resolves the
+    /// window list fresh rather than trusting a stale handle, since a window can close between
+    /// the remote client's list fetch and its embed request.</summary>
+    public (bool Success, string? Error) EmbedStealthWindowRemote(string id)
+    {
+        if (!long.TryParse(id, out var handleValue)) return (false, "Invalid window id");
+        var handle = new IntPtr(handleValue);
+        var target = StealthWindowService.GetVisibleWindows().FirstOrDefault(w => w.Handle == handle);
+        if (target is null) return (false, "Window no longer available — refresh the list");
+
+        var (cx, cy, cw, _) = WindowService.GetGeometry(this);
+        bool ok = _embedService.Embed(target.Handle, target.Title, (int)(cx + cw + 16), (int)cy, 900, 600);
+        if (!ok) return (false, "Failed to create embed container");
+
+        _selectedStealthWindow     = target;
+        StealthStatusText.Text     = "🔒 Embedded — container is stealth";
+        EmbedBtn.Visibility        = Visibility.Collapsed;
+        ReleaseEmbedBtn.Visibility = Visibility.Visible;
+        return (true, null);
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────────

@@ -1022,6 +1022,60 @@
                                        Text=""/>
                         </StackPanel>
                     </Border>
+
+                    <!-- Card: Web Remote — a second, LAN-reachable server (WebRemoteService,
+                         port 47824) serving a small static control page so a phone/tablet/other
+                         PC on the same Wi-Fi can control onAIr, same as the Stream Deck plugin
+                         does locally. Separate from REMOTE CONTROL above (that one stays
+                         loopback-only) — needs a PIN plus a one-time Windows network permission
+                         since it's actually reachable from other devices. -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="WEB REMOTE" Style="{StaticResource CardTitleStyle}"/>
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextWrapping="Wrap">
+                                Open onAIr's remote control from a phone, tablet, or another PC on your
+                                Wi-Fi — toggle the TP, AI Insights, recording, and more. Requires a
+                                one-time Windows network permission (see "Grant Network Access" below)
+                                and the PIN shown here. Windows Firewall may also prompt the first time
+                                a device connects — click Allow.
+                            </TextBlock>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock x:Name="WebRemoteStatusText"
+                                           VerticalAlignment="Center"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <ToggleSwitch x:Name="WebRemoteToggle"
+                                              OnContent="On" OffContent="Off"
+                                              Toggled="WebRemoteToggle_Toggled"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="PIN:" VerticalAlignment="Center" FontSize="12"/>
+                                <TextBlock x:Name="WebRemotePinText"
+                                           VerticalAlignment="Center"
+                                           FontFamily="Consolas"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"/>
+                                <Button Content="↺ Regenerate"
+                                        FontSize="12" Padding="8,4"
+                                        Click="RegenerateWebRemotePin_Click"
+                                        ToolTipService.ToolTip="Generates a new PIN — every previously connected device must re-enter it"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="GrantWebRemoteAccessBtn"
+                                        Content="🔓 Grant Network Access"
+                                        Click="GrantWebRemoteAccess_Click"
+                                        ToolTipService.ToolTip="One-time Windows permission so other devices can reach this server (shows a UAC prompt)"/>
+                                <Button Content="📋 Copy Link"
+                                        Click="CopyWebRemoteLink_Click"
+                                        ToolTipService.ToolTip="Copies a link (with PIN) you can open or share to connect from another device"/>
+                            </StackPanel>
+                            <TextBlock x:Name="WebRemoteCopyStatusText"
+                                       FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       Text=""/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- ── App Stealth Tab ─────────────────────────────────── -->

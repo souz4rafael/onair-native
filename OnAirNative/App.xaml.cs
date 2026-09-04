@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 using OnAirNative.Services;
@@ -19,6 +20,11 @@ public partial class App : Application
     public static TrayService       Tray       { get; private set; } = null!;
     public static UpdateService     Update     { get; private set; } = null!;
     public static RemoteControlService? RemoteControl { get; private set; }
+    public static WebRemoteService?    WebRemote  { get; private set; }
+    /// <summary>True when the Web Remote is enabled but couldn't bind because the one-time
+    /// Windows URL-ACL grant hasn't been made yet — drives the Settings tab's "needs elevation"
+    /// status text / "Grant Network Access" button.</summary>
+    public static bool WebRemoteNeedsElevation { get; private set; }
 
     private OverlayWindow?    _overlay;
     private ControllerWindow? _controller;
@@ -129,9 +135,18 @@ public partial class App : Application
             StartRemoteControl();
         else
             File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} RemoteControlService not started (disabled in settings)\n");
+
+        // Web Remote — LAN-reachable sibling server (WebRemoteService, port 47824), off by
+        // default. Same best-effort posture: never let a bind failure block app startup. Unlike
+        // RemoteControl, a failure here is commonly EXPECTED (URL-ACL not granted yet) rather
+        // than exceptional — see StartWebRemote's own doc comment.
+        if (Config.Current.WebRemote.Enabled)
+            StartWebRemote();
+
         // PopulateStaticUi() already ran (triggered by _controller.Activate() above, before this
         // point) and read App.RemoteControl too early — refresh now that start/skip is decided.
         _controller.RefreshRemoteControlStatusText();
+        _controller.RefreshWebRemoteStatusText();
 
         // Handle .txt file opened via right-click → "Open with onAIr"
         var activationArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
@@ -146,6 +161,7 @@ public partial class App : Application
             Hotkeys.Dispose();
             Tray.Dispose();
             RemoteControl?.Dispose();
+            WebRemote?.Dispose();
             Audio.Dispose();
             Whisper.Dispose();
             AiChat.Dispose();
@@ -241,8 +257,30 @@ public partial class App : Application
             case HotkeyAction.ToggleInsightsCaptureProtection:
                 _controller?.ToggleInsightsCaptureProtection();
                 break;
+            case HotkeyAction.ClearConversation:
+                _overlay?.ViewModel.ClearConversationCommand.Execute(null);
+                break;
+            case HotkeyAction.StartNewQaSession:
+                _overlay?.ViewModel.StartNewQaSessionCommand.Execute(null);
+                break;
+            case HotkeyAction.CloseQaSession:
+                _overlay?.ViewModel.CloseQaSessionCommand.Execute(null);
+                break;
+            case HotkeyAction.ResetUsage:
+                _controller?.ResetUsage();
+                break;
         }
+        NotifyRemoteClientsStateChanged();
+    }
+
+    /// <summary>Fans out a state-changed notification to every remote server that's currently
+    /// running — the loopback Stream Deck/MCP server AND the LAN-reachable Web Remote, if
+    /// enabled. Kept as a single helper so a caller (this class or <see cref="ControllerWindow"/>)
+    /// never has to remember to update both individually.</summary>
+    public void NotifyRemoteClientsStateChanged()
+    {
         RemoteControl?.NotifyStateMayHaveChanged();
+        WebRemote?.NotifyStateMayHaveChanged();
     }
 
     /// <summary>Builds a snapshot of the current, remotely-interesting app state — consumed by
@@ -270,7 +308,7 @@ public partial class App : Application
         if (!File.Exists(path)) return (false, $"File not found: {path}");
 
         await _overlay.ViewModel.LoadScriptAsync(path);
-        RemoteControl?.NotifyStateMayHaveChanged();
+        NotifyRemoteClientsStateChanged();
         return (true, null);
     }
 
@@ -294,7 +332,7 @@ public partial class App : Application
         if (_overlay is null) return (false, "Overlay not ready");
         if (string.IsNullOrWhiteSpace(text)) return (false, "Insight text is required — call clear_insight to remove it instead");
         _overlay.ViewModel.SetInsight(text);
-        RemoteControl?.NotifyStateMayHaveChanged();
+        NotifyRemoteClientsStateChanged();
         return (true, null);
     }
 
@@ -303,8 +341,28 @@ public partial class App : Application
     {
         if (_overlay is null) return (false, "Overlay not ready");
         _overlay.ViewModel.ClearInsight();
-        RemoteControl?.NotifyStateMayHaveChanged();
+        NotifyRemoteClientsStateChanged();
         return (true, null);
+    }
+
+    /// <summary>Enumerates visible top-level windows for the Web Remote's App Stealth tab — same
+    /// source list the native Stealth tab's WindowListCombo uses, projected through
+    /// <see cref="ControllerWindow.ListStealthWindowsRemote"/> since only it has the live
+    /// StealthWindowService state.</summary>
+    public List<ControllerWindow.RemoteWindowInfo> ListStealthWindowsRemote() =>
+        _controller?.ListStealthWindowsRemote() ?? [];
+
+    /// <summary>Embeds the window identified by <paramref name="id"/> (from
+    /// <see cref="ListStealthWindowsRemote"/>) into the App Stealth container — the Web Remote's
+    /// equivalent of picking a window in the native Stealth tab then pressing "Embed in
+    /// container". Delegates to <see cref="ControllerWindow.EmbedStealthWindowRemote"/> for the
+    /// actual re-parenting/positioning logic.</summary>
+    public (bool Success, string? Error) EmbedStealthWindowRemote(string id)
+    {
+        if (_controller is null) return (false, "Controller not ready");
+        var (success, error) = _controller.EmbedStealthWindowRemote(id);
+        if (success) NotifyRemoteClientsStateChanged();
+        return (success, error);
     }
 
     /// <summary>Starts the Stream Deck remote control WebSocket server if it isn't already
@@ -336,6 +394,68 @@ public partial class App : Application
     {
         RemoteControl?.Dispose();
         RemoteControl = null;
+    }
+
+    /// <summary>Starts the Web Remote LAN server if it isn't already running. Best-effort, like
+    /// <see cref="StartRemoteControl"/> — but a bind failure here commonly means "the one-time
+    /// Windows URL-ACL grant hasn't been made yet" (ErrorCode 5, access denied) rather than a
+    /// genuine problem, so that specific case is tracked separately via
+    /// <see cref="WebRemoteNeedsElevation"/> to drive the Settings tab's UI instead of just
+    /// logging a generic failure. Generates a PIN on first-ever enable if one isn't set yet.</summary>
+    public void StartWebRemote()
+    {
+        if (WebRemote is not null || _uiQueue is null) return;
+        WebRemoteNeedsElevation = false;
+        var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "onAIr", "launch.log");
+
+        if (string.IsNullOrEmpty(Config.Current.WebRemote.Pin))
+        {
+            Config.Current.WebRemote.Pin = WebRemoteService.GeneratePin();
+            Config.Save();
+        }
+
+        try
+        {
+            WebRemote = new WebRemoteService(
+                ExecuteAction, GetRemoteState, _uiQueue,
+                SetRemoteField, LoadScriptRemoteAsync, GetScriptTextRemote, ListFontsRemote,
+                ShowInsightRemote, ClearInsightRemote,
+                ListStealthWindowsRemote, EmbedStealthWindowRemote,
+                () => Config.Current.WebRemote.Pin);
+            WebRemote.Start();
+            File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} WebRemoteService started on port {WebRemoteService.Port}\n");
+        }
+        catch (HttpListenerException ex) when (ex.ErrorCode == 5)
+        {
+            WebRemote = null;
+            WebRemoteNeedsElevation = true;
+            File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} WebRemoteService needs URL ACL grant: {ex.Message}\n");
+        }
+        catch (Exception ex)
+        {
+            WebRemote = null;
+            File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} WebRemoteService failed to start: {ex.Message}\n");
+        }
+    }
+
+    /// <summary>Stops and disposes the Web Remote server, if running.</summary>
+    public void StopWebRemote()
+    {
+        WebRemote?.Dispose();
+        WebRemote = null;
+        WebRemoteNeedsElevation = false;
+    }
+
+    /// <summary>Runs the one-time elevated URL-ACL grant (shows a UAC prompt) then retries
+    /// starting the Web Remote server — called ONLY from the Settings tab's explicit "Grant
+    /// Network Access" button, never automatically. Blocking (waits on the elevated netsh
+    /// process) — callers must run this off the UI thread. Returns true if the server is running
+    /// afterward.</summary>
+    public bool TryGrantWebRemoteAccessAndStart()
+    {
+        if (!WebRemoteService.TryGrantUrlAcl()) return false;
+        StartWebRemote();
+        return WebRemote is not null;
     }
 
     // Called on the PRIMARY instance (via Program.OnActivated) when a second

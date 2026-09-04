@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>onAIr Remote</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="pinGate" class="pin-gate">
+  <div class="pin-card">
+    <h1>on<span class="brand-accent">AIr</span> Remote</h1>
+    <p>Enter the PIN shown in onAIr's Settings → WEB REMOTE.</p>
+    <input id="pinInput" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="off">
+    <button id="pinSubmit">Connect</button>
+    <p id="pinError" class="error"></p>
+  </div>
+</div>
+
+<div id="app" class="app hidden">
+  <header>
+    <div class="brand">
+      <span id="connDot" class="dot"></span>
+      <h1>on<span class="brand-accent">AIr</span> Remote</h1>
+    </div>
+  </header>
+
+  <nav class="tabbar" role="tablist">
+    <button class="pill active" data-tab="tp" role="tab" aria-selected="true">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="3" width="16" height="18" rx="2"></rect>
+        <line x1="8" y1="8" x2="16" y2="8"></line>
+        <line x1="8" y1="12" x2="16" y2="12"></line>
+        <line x1="8" y1="16" x2="13" y2="16"></line>
+      </svg>
+      <span>Teleprompter</span>
+    </button>
+    <button class="pill" data-tab="qa" role="tab" aria-selected="false">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4 3.3V16H6a2 2 0 0 1-2-2V6z"></path>
+      </svg>
+      <span>Q&amp;A</span>
+    </button>
+    <button class="pill" data-tab="insights" role="tab" aria-selected="false">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"></path>
+        <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z"></path>
+      </svg>
+      <span>AI Insights</span>
+    </button>
+    <button class="pill" data-tab="stealth" role="tab" aria-selected="false">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+        <line x1="3" y1="21" x2="21" y2="3"></line>
+      </svg>
+      <span>App Stealth</span>
+    </button>
+  </nav>
+
+  <div class="tab-panel" data-panel="tp">
+    <section class="card">
+      <h2>Teleprompter</h2>
+      <div class="row">
+        <button data-cmd="ToggleOverlayVisibility" class="toggle-btn" id="btnTpOpen">Open / Close</button>
+        <button data-cmd="ToggleMoveMode" class="toggle-btn" id="btnTpLock">Lock</button>
+        <button data-cmd="ToggleOverlayCaptureProtection" class="toggle-btn" id="btnTpHide">Hide in Share</button>
+      </div>
+      <div class="stepper">
+        <span>Font size</span>
+        <button data-adjust="DecreaseFontSize">−</button>
+        <span id="valFontSize">--</span>
+        <button data-adjust="IncreaseFontSize">+</button>
+      </div>
+      <div class="stepper">
+        <span>Opacity</span>
+        <button data-adjust="DecreaseOpacity">−</button>
+        <span id="valOpacity">--</span>
+        <button data-adjust="IncreaseOpacity">+</button>
+      </div>
+      <div class="row" id="scrollModeRow">
+        <button data-scrollmode="Manual" class="mode-btn">Manual</button>
+        <button data-scrollmode="Auto" class="mode-btn">Auto</button>
+        <button data-scrollmode="Voice" class="mode-btn">Voice</button>
+      </div>
+      <div class="stepper" id="scrollStepRow">
+        <span>Step</span>
+        <button data-adjust="DecreaseScrollStep">−</button>
+        <span id="valScrollStep">--</span>
+        <button data-adjust="IncreaseScrollStep">+</button>
+      </div>
+      <div class="stepper" id="scrollSpeedRow">
+        <span>Speed</span>
+        <button data-adjust="DecreaseScrollSpeed">−</button>
+        <span id="valScrollSpeed">--</span>
+        <button data-adjust="IncreaseScrollSpeed">+</button>
+      </div>
+      <div class="stepper" id="voiceSpeedRow">
+        <span>Voice speed</span>
+        <button data-adjust="DecreaseVoiceScrollSpeed">−</button>
+        <span id="valVoiceSpeed">--</span>
+        <button data-adjust="IncreaseVoiceScrollSpeed">+</button>
+      </div>
+      <div class="stepper" id="voiceThresholdRow">
+        <span>Sensitivity</span>
+        <button data-adjust="DecreaseVoiceThreshold">−</button>
+        <span id="valVoiceThreshold">--</span>
+        <button data-adjust="IncreaseVoiceThreshold">+</button>
+      </div>
+      <p class="hint">Script: <span id="valScriptName">--</span></p>
+    </section>
+
+    <section class="card">
+      <h2>Appearance</h2>
+      <div class="swatch-row" data-color-field="FontColor">
+        <button class="swatch" data-color="#F0F0F0" style="background:#F0F0F0"></button>
+        <button class="swatch" data-color="#FFE066" style="background:#FFE066"></button>
+        <button class="swatch" data-color="#90EE90" style="background:#90EE90"></button>
+        <button class="swatch" data-color="#7FFFD4" style="background:#7FFFD4"></button>
+        <button class="swatch" data-color="#FFA07A" style="background:#FFA07A"></button>
+        <button class="swatch" data-color="#FFB6C1" style="background:#FFB6C1"></button>
+      </div>
+      <div class="row">
+        <input id="customColorTp" class="hex-input" placeholder="#RRGGBB" maxlength="7" autocomplete="off">
+        <button id="btnApplyColorTp" data-apply-color-field="FontColor" data-apply-color-input="customColorTp">Apply</button>
+      </div>
+      <p class="field-error hidden" id="colorErrorTp"></p>
+      <select id="fontFamilyTp" data-fontfamily-field="FontFamily" class="font-select"></select>
+    </section>
+
+    <section class="card">
+      <h2>Virtual Scroll</h2>
+      <div class="row">
+        <button data-cmd="ScrollUp" class="scroll-btn">▲ Up</button>
+        <button data-cmd="ScrollDown" class="scroll-btn">▼ Down</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="tab-panel hidden" data-panel="qa">
+    <section class="card">
+      <h2>Recording</h2>
+      <button id="btnRecording" class="toggle-btn wide" data-cmd="ToggleRecording">Start / Stop Recording</button>
+      <p class="hint" id="valChatProvider"></p>
+      <button data-cmd="RecheckWhisperModel" class="link-btn-inline">🔄 Recheck Whisper</button>
+    </section>
+
+    <section class="card">
+      <h2>Suggestions</h2>
+      <button id="btnShowFollowUps" class="toggle-btn wide" data-toggle-field="ShowFollowUpSuggestions">Suggest questions to ask the client</button>
+    </section>
+
+    <section class="card">
+      <h2>Q&amp;A Session</h2>
+      <p><span id="qaSessionBadge" class="badge">--</span></p>
+      <div class="row">
+        <button data-cmd="StartNewQaSession" class="toggle-btn">Start New Session</button>
+        <button data-cmd="CloseQaSession" class="toggle-btn">Close Session</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Conversation Memory</h2>
+      <p class="hint">Turns remembered: <span id="valConvTurns">--</span></p>
+      <button data-cmd="ClearConversation" class="toggle-btn wide">Clear Conversation</button>
+    </section>
+  </div>
+
+  <div class="tab-panel hidden" data-panel="insights">
+    <section class="card">
+      <h2>AI Insights</h2>
+      <div class="row">
+        <button data-cmd="ToggleInsightsVisibility" class="toggle-btn" id="btnInsOpen">Open / Close</button>
+        <button data-cmd="ToggleInsightsLock" class="toggle-btn" id="btnInsLock">Lock</button>
+        <button data-cmd="ToggleInsightsCaptureProtection" class="toggle-btn" id="btnInsHide">Hide in Share</button>
+      </div>
+      <div class="stepper">
+        <span>Font size</span>
+        <button data-setstep="InsightFontSize:-1">−</button>
+        <span id="valInsFontSize">--</span>
+        <button data-setstep="InsightFontSize:1">+</button>
+      </div>
+      <div class="stepper">
+        <span>Opacity</span>
+        <button data-setstep="InsightOpacity:-5">−</button>
+        <span id="valInsOpacity">--</span>
+        <button data-setstep="InsightOpacity:5">+</button>
+      </div>
+      <textarea id="insightInput" placeholder="Push a private note to the Insights panel…" rows="2"></textarea>
+      <div class="row">
+        <button id="btnInsightSend">Send</button>
+        <button id="btnInsightClear">Clear</button>
+      </div>
+      <p class="hint">Current: <span id="valInsightText">(none)</span></p>
+    </section>
+
+    <section class="card">
+      <h2>Appearance</h2>
+      <div class="swatch-row" data-color-field="InsightFontColor">
+        <button class="swatch" data-color="#F0F0F0" style="background:#F0F0F0"></button>
+        <button class="swatch" data-color="#FFE066" style="background:#FFE066"></button>
+        <button class="swatch" data-color="#90EE90" style="background:#90EE90"></button>
+        <button class="swatch" data-color="#7FFFD4" style="background:#7FFFD4"></button>
+        <button class="swatch" data-color="#FFA07A" style="background:#FFA07A"></button>
+        <button class="swatch" data-color="#FFB6C1" style="background:#FFB6C1"></button>
+      </div>
+      <div class="row">
+        <input id="customColorIns" class="hex-input" placeholder="#RRGGBB" maxlength="7" autocomplete="off">
+        <button id="btnApplyColorIns" data-apply-color-field="InsightFontColor" data-apply-color-input="customColorIns">Apply</button>
+      </div>
+      <p class="field-error hidden" id="colorErrorIns"></p>
+      <select id="fontFamilyIns" data-fontfamily-field="InsightFontFamily" class="font-select"></select>
+    </section>
+
+    <section class="card">
+      <h2>Token Usage</h2>
+      <p class="hint" id="valUsageSummary">--</p>
+      <button data-cmd="ResetUsage" class="toggle-btn wide">Reset Usage</button>
+    </section>
+
+    <section class="card">
+      <h2>Pacing</h2>
+      <p><span id="pacingBadge" class="badge">--</span> <span id="valPacingSummary"></span></p>
+    </section>
+
+    <section class="card">
+      <h2>Q&amp;A Recap</h2>
+      <p class="hint">Q: <span id="valQuestion">--</span></p>
+      <p class="hint">A: <span id="valAnswer">--</span></p>
+    </section>
+
+    <section class="card">
+      <h2>Follow-up Suggestions</h2>
+      <ul id="followUpList"></ul>
+    </section>
+  </div>
+
+  <div class="tab-panel hidden" data-panel="stealth">
+    <section class="card">
+      <h2>Window Embed</h2>
+      <p class="hint">Hide any running app from screen share by embedding it in a stealth container next to the Controller. Works best with Win32/WPF apps.</p>
+      <div class="row">
+        <select id="stealthWindowSelect" class="select-inline">
+          <option value="">Loading windows…</option>
+        </select>
+        <button id="btnRefreshWindows" class="icon-btn" title="Refresh window list">↺</button>
+      </div>
+      <div class="row">
+        <button id="btnEmbedWindow" class="toggle-btn wide" disabled>⊕ Embed in container</button>
+      </div>
+      <div class="row">
+        <button data-cmd="ReleaseStealthContainer" class="toggle-btn wide">⊖ Release Container</button>
+      </div>
+      <p class="hint">Status: <span id="valStealthStatus">Not embedded</span></p>
+    </section>
+
+    <section class="card">
+      <h2>Controller</h2>
+      <button data-cmd="ToggleControllerCaptureProtection" class="toggle-btn wide" id="btnCtrlHide">Hide Controller in Share</button>
+    </section>
+  </div>
+
+  <footer>
+    <button id="btnForget" class="link-btn">Forget this device</button>
+  </footer>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -15,6 +15,7 @@ public partial class ControllerViewModel : ObservableObject
     [ObservableProperty] private bool _overlayProtected;
     [ObservableProperty] private string _theme = "System";
     [ObservableProperty] private bool _remoteControlEnabled = true;
+    [ObservableProperty] private bool _webRemoteEnabled;
 
     private readonly ConfigService    _config;
     private readonly OverlayViewModel _overlay;
@@ -33,6 +34,7 @@ public partial class ControllerViewModel : ObservableObject
         OverlayProtected     = config.Current.OverlayProtected;
         Theme                = config.Current.Theme;
         RemoteControlEnabled = config.Current.RemoteControlEnabled;
+        WebRemoteEnabled     = config.Current.WebRemote.Enabled;
 
         ScrollTab   = new ScrollTabViewModel(config, overlay);
         AiTab       = new AiTabViewModel(config, ai, whisper);
@@ -64,6 +66,12 @@ public partial class ControllerViewModel : ObservableObject
         RemoteControlEnabledChanged?.Invoke(this, value);
     }
 
+    partial void OnWebRemoteEnabledChanged(bool value)
+    {
+        _config.Current.WebRemote.Enabled = value;
+        WebRemoteEnabledChanged?.Invoke(this, value);
+    }
+
     /// <summary>Raised when the Controller screen-share protection toggle changes.</summary>
     public event EventHandler<bool>? ControllerProtectionChanged;
 
@@ -79,4 +87,8 @@ public partial class ControllerViewModel : ObservableObject
     /// <summary>Raised when the user toggles the Stream Deck remote control server on/off —
     /// the View wires this to App.StartRemoteControl()/StopRemoteControl().</summary>
     public event EventHandler<bool>? RemoteControlEnabledChanged;
+
+    /// <summary>Raised when the user toggles the Web Remote LAN server on/off — the View wires
+    /// this to App.StartWebRemote()/StopWebRemote().</summary>
+    public event EventHandler<bool>? WebRemoteEnabledChanged;
 }

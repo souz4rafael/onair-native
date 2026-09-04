@@ -35,6 +35,18 @@ public enum HotkeyAction
     ToggleInsightsVisibility,
     ToggleInsightsLock,
     ToggleInsightsCaptureProtection,
+    /// <summary>No physical hotkey registered for any of these four — only reachable via the
+    /// Controller's own buttons (Q&amp;A tab's Conversation Memory / Q&amp;A Session Recording /
+    /// Settings → USAGE cards) or remote control (Web Remote / Stream Deck / MCP). Grouped here
+    /// since they were all added together for Web Remote Q&amp;A-tab parity — see
+    /// <see cref="WebRemoteService"/>'s doc comment.</summary>
+    ClearConversation,
+    /// <summary>Starts a brand-new Q&amp;A session with no label (equivalent to leaving the
+    /// Controller's optional "Session label" box empty) — see
+    /// <c>OverlayViewModel.StartNewQaSession</c>.</summary>
+    StartNewQaSession,
+    CloseQaSession,
+    ResetUsage,
 }
 
 /// <summary>

@@ -86,6 +86,14 @@
     <Content Include="Assets\mcp-server\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+
+    <!-- Static control page for the Web Remote (WebRemoteService, port 47824) — plain
+         HTML/CSS/JS, no build step. Served directly from disk at runtime, so any edit here just
+         needs a rebuild/redeploy of the app, not a separate publish workflow like the two
+         bundles above. -->
+    <Content Include="Assets\web-remote\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
