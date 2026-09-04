@@ -18,12 +18,13 @@ screen capture.
 
 [![Controller Script tab](OnAirNative/Assets/screenshots/screenshot-controller-script.png)](OnAirNative/Assets/screenshots/screenshot-controller-script.png)
 
-_The Controller is your presenter dashboard. Every tab is organised into cards. Load your `.txt`
-script — headings (`#`/`##`) automatically populate a **CHAPTERS** card for one-click navigation.
-Choose scroll mode (Manual / Auto / Voice — only the active mode's speed control is shown), adjust
-font size and TP opacity, and pick a font color. Large ▲▼ buttons are touch-friendly for a
-secondary screen. The footer's TP controls (**Open TP** · **Lock TP** · **Hide TP**) sit on the
-left, **Hide Controller** on the right._
+_The Controller is your presenter dashboard. Every tab is organised into cards, selected via a
+segmented pill tab bar (Script · Q&A · AI Insights · Settings · App Stealth · About). Load your
+`.txt` script — headings (`#`/`##`) automatically populate a **CHAPTERS** card for one-click
+navigation. Choose scroll mode (Manual / Auto / Voice — only the active mode's speed control is
+shown), adjust font size and TP opacity, and pick a font color. Large ▲▼ buttons are touch-friendly
+for a secondary screen. The footer's TP controls (**Open TP** · **Lock TP** · **Hide TP**) sit on
+the left, **Hide Controller** on the right._
 
 ---
 
@@ -38,13 +39,56 @@ biases both Whisper transcription and the AI's answers toward your exact termino
 
 ---
 
-### Controller — Pacing coach & conversation memory
+### Controller — Knowledge base & conversation memory
 
-[![Controller pacing and conversation memory](OnAirNative/Assets/screenshots/screenshot-controller-pacing.png)](OnAirNative/Assets/screenshots/screenshot-controller-pacing.png)
+[![Controller Knowledge base and conversation memory](OnAirNative/Assets/screenshots/screenshot-controller-knowledgebase.png)](OnAirNative/Assets/screenshots/screenshot-controller-knowledgebase.png)
 
-_After each recorded question, a rough words-per-minute **pacing** estimate appears here — based on
-actual speaking time (pauses excluded), presenter-side only, never shown on the TP. Multi-turn
-conversation memory (last 6 Q&A turns) and running token usage are tracked in the same card._
+_Attach small `.txt`/`.md` reference documents — product specs, FAQs, pricing — and onAIr
+automatically searches them for relevant excerpts when answering a question. No embeddings/vector
+database, no extra AI call: a lightweight, instant, local relevance search. The **Conversation
+memory** card below it holds the last 6 Q&A turns used as context for follow-ups — click **View
+conversation** for a read-only popup of the full history, or **Clear** to reset it._
+
+---
+
+### Controller — AI Insights (window controls & appearance)
+
+[![Controller AI Insights tab, controls and appearance](OnAirNative/Assets/screenshots/screenshot-controller-insights.png)](OnAirNative/Assets/screenshots/screenshot-controller-insights.png)
+
+_Open, lock, or hide-in-share the separate AI Insights window from here, and tune its appearance
+(font size, opacity, font family, color) completely independently of the TP's own appearance
+settings — see [AI Insights window](#ai-insights-window) below._
+
+---
+
+### Controller — AI Insights (section toggles)
+
+[![Controller AI Insights tab, section toggles](OnAirNative/Assets/screenshots/screenshot-controller-insights-toggles.png)](OnAirNative/Assets/screenshots/screenshot-controller-insights-toggles.png)
+
+_Four independent on/off switches — **Questions** (follow-up suggestions, active in Q&A mode),
+**External AI Insights**, **Pacing**, and **Token Usage** — control which of the AI Insights
+window's four sections are shown, in the same top-to-bottom order they appear in the window itself._
+
+---
+
+### Controller — Settings
+
+[![Controller Settings tab](OnAirNative/Assets/screenshots/screenshot-controller-settings.png)](OnAirNative/Assets/screenshots/screenshot-controller-settings.png)
+
+_Choose your audio input device (for recording and voice scroll), configure the voice scroll
+sensitivity threshold, and manage all 7 AI providers — including **Local LM** for self-hosted
+servers like Ollama or LM Studio._
+
+---
+
+### Controller — Settings (theme & remote control)
+
+[![Controller Settings tab, theme and remote control](OnAirNative/Assets/screenshots/screenshot-controller-settings-remote.png)](OnAirNative/Assets/screenshots/screenshot-controller-settings-remote.png)
+
+_Pick a **System / Light / Dark** theme — applies instantly, no restart needed. The **Remote
+Control** card toggles the local Stream Deck/MCP WebSocket server and links to the MCP tools dialog.
+The **Web Remote** card enables a PIN-protected browser control surface reachable from your phone or
+tablet on the same Wi-Fi — see [Web Remote](#web-remote-browser-control) below._
 
 ---
 
@@ -59,24 +103,12 @@ tools._
 
 ---
 
-### Controller — Settings
+### Controller — About
 
-[![Controller Settings tab](OnAirNative/Assets/screenshots/screenshot-controller-settings.png)](OnAirNative/Assets/screenshots/screenshot-controller-settings.png)
+[![Controller About tab](OnAirNative/Assets/screenshots/screenshot-controller-about.png)](OnAirNative/Assets/screenshots/screenshot-controller-about.png)
 
-_Choose your audio input device (for recording and voice scroll), configure the voice scroll
-sensitivity threshold, and manage all 7 AI providers — including **Local LM** for self-hosted
-servers like Ollama or LM Studio. Pick a **System / Light / Dark** theme for the Controller — it
-applies instantly, no restart needed._
-
----
-
-### Controller — Knowledge base
-
-[![Controller Knowledge base card](OnAirNative/Assets/screenshots/screenshot-controller-knowledgebase.png)](OnAirNative/Assets/screenshots/screenshot-controller-knowledgebase.png)
-
-_Attach small `.txt`/`.md` reference documents — product specs, FAQs, pricing — and onAIr
-automatically searches them for relevant excerpts when answering a question. No embeddings/vector
-database, no extra AI call: a lightweight, instant, local relevance search._
+_Version info, **Check for Updates** with one-click install, and the full global keyboard shortcut
+reference._
 
 ---
 
@@ -97,6 +129,31 @@ chapter below for full setup steps, including reaching a server on another PC on
 
 _The TP is the transparent, always-on-top window your script scrolls in. It floats above any app —
 including a shared screen or recording — while staying invisible to viewers by default._
+
+---
+
+### AI Insights window (overlay)
+
+[![AI Insights window](OnAirNative/Assets/screenshots/screenshot-ai-insights-overlay.png)](OnAirNative/Assets/screenshots/screenshot-ai-insights-overlay.png)
+
+_A separate, freely resizable overlay — open it alongside the TP at the same time. Four sections,
+each independently toggleable: follow-up **Questions**, **External AI Insights** (pushed by an MCP
+client via `onair_show_insight`), **Pacing**, and **Token Usage**. See
+[AI Insights window](#ai-insights-window) below for the full picture._
+
+---
+
+### Web Remote (screenshots)
+
+[![Web Remote Teleprompter tab](OnAirNative/Assets/screenshots/screenshot-webremote-teleprompter.png)](OnAirNative/Assets/screenshots/screenshot-webremote-teleprompter.png)
+[![Web Remote Q&A tab](OnAirNative/Assets/screenshots/screenshot-webremote-qa.png)](OnAirNative/Assets/screenshots/screenshot-webremote-qa.png)
+[![Web Remote AI Insights tab](OnAirNative/Assets/screenshots/screenshot-webremote-insights.png)](OnAirNative/Assets/screenshots/screenshot-webremote-insights.png)
+[![Web Remote App Stealth tab](OnAirNative/Assets/screenshots/screenshot-webremote-stealth.png)](OnAirNative/Assets/screenshots/screenshot-webremote-stealth.png)
+
+_A mobile-friendly control page — enable it in Settings → WEB REMOTE, then browse to
+`http://<your-pc-ip>:<port>` from any phone/tablet on the same Wi-Fi and enter the PIN. Four tabs
+mirror the Stream Deck/MCP capabilities: Teleprompter, Q&A, AI Insights (same 4 section toggles as
+the Controller), and App Stealth. See [Web Remote](#web-remote-browser-control) below._
 
 ---
 
@@ -153,11 +210,12 @@ including a shared screen or recording — while staying invisible to viewers by
 - **Max tokens per answer** — tunable slider (50-2000), controls answer length/cost
 - **Glossary + knowledge base** — custom vocabulary biases both transcription and answers; small
   reference documents (.txt/.md) get automatically searched for relevant excerpts per question
-- **Follow-up question suggestions** (optional toggle) — after each answer, a separate minimal AI
-  call suggests 2-3 questions *you* could ask the client next to keep the conversation flowing;
-  shown as plain text on the TP, never clickable
-- **Token usage counter** — running total of prompt/completion tokens for the session, with a
-  one-click reset
+- **Follow-up question suggestions** (optional toggle, Controller → AI Insights tab) — after each
+  answer, a separate minimal AI call suggests 2-3 questions *you* could ask the client next to keep
+  the conversation flowing; shown as plain text in the [AI Insights window](#ai-insights-window)'s
+  **Questions** section, never on the TP, never clickable
+- **Token usage counter** — running total of prompt/completion tokens for the session, shown in the
+  AI Insights window's **Token Usage** section, with a one-click reset
 - **Multi-turn conversation memory** — the last 6 Q&A turns are automatically included as context
   for follow-up questions (invisible on the TP — the AI remembers, you don't see the clutter); a
   **Clear conversation** button resets it
@@ -166,12 +224,14 @@ including a shared screen or recording — while staying invisible to viewers by
   never inherits anything from the previous one (a different client/conversation starts clean). A
   link opens the folder where saved sessions live — no in-app session browser
 - **Pacing coach** — a rough words-per-minute estimate after each recorded question, based on
-  actual speaking time (pauses excluded); presenter-side only, shown in the Controller, never on
-  the TP
+  actual speaking time (pauses excluded); presenter-side only, shown in the AI Insights window's
+  **Pacing** section, never on the TP
 - **Real-time monitoring + Copilot insights via MCP** — an external MCP agent can poll each Q&A
-  turn as it completes (question, answer, pacing) and push a short coaching note into a
-  Copilot-insight footer on the TP itself — visible in both Script and Q&A modes, kept visually
-  separate from the AI's own Q&A answer; see [Remote control](#remote-control-stream-deck--ai-assistants)
+  turn as it completes (question, answer, pacing) and push a short coaching note that lands in
+  **two** places at once: a small Copilot-insight footer on the TP itself (visible in both Script
+  and Q&A modes, kept visually separate from the AI's own Q&A answer) and the **External AI
+  Insights** section of the separate [AI Insights window](#ai-insights-window); see
+  [Remote control](#remote-control-stream-deck--ai-assistants)
 
 ### Controller window
 Every tab is organised into cards (bold, letter-spaced, accent-colored titles) that group related
@@ -181,18 +241,43 @@ shows icon+text and grows; the rest collapse to icon-only):
   (click a preset swatch to load its hex into the editable custom-color box), font family picker,
   save/reset settings, virtual ▲▼ buttons
 - **Q&A tab**: record button, AI provider selection + test connection, prompts (system prompt,
-  presentation context, glossary, max tokens, follow-up suggestions toggle), knowledge base
-  reference documents, usage & conversation memory (with reset/clear), pacing coach, Q&A session
-  recording (start/close + open folder)
+  presentation context, glossary, max tokens), knowledge base reference documents, conversation
+  memory (**View conversation** popup + **Clear**), Q&A session recording (start/close + open
+  folder)
+- **AI Insights tab**: open/lock/hide-in-share the separate AI Insights window, its own appearance
+  settings (font size, opacity, font family, color — independent from the TP's), and 4 on/off
+  toggles (Questions, External AI Insights, Pacing, Token Usage) controlling which sections of that
+  window are shown — see [AI Insights window](#ai-insights-window)
 - **App Stealth tab**: embed any Win32 window in a stealth container
 - **Settings tab**: audio device + capture source selection + live mic level test, voice scroll
   sensitivity, one card per AI provider (configure credentials and test each independently — see
   "AI providers" below), local Whisper model file (load/unload), System/Light/Dark theme picker,
-  Remote Control (Stream Deck + MCP) toggle and setup
+  Remote Control (Stream Deck + MCP) toggle and setup, Web Remote (browser control) toggle and PIN
 - **About tab**: version, hotkey reference, GitHub link, check-for-updates with one-click install
 - **Single instance**: launching the app again just brings the existing Controller forward
 - **Footer**: the 3 TP controls (**Open TP** · **Lock TP** · **Hide TP**) on the left, **Hide
   Controller** on the right
+
+### AI Insights window
+A second overlay window, completely separate from the TP — open both at once, resize/move each
+independently, and control every aspect from the Controller's **AI Insights** tab (or Stream Deck /
+MCP / Web Remote):
+- **Independent window** — its own open/close, lock (click-through), and hide-from-screen-share
+  states, none of which affect the TP
+- **Own appearance** — font size, opacity, font family, and text color, tuned separately from the
+  TP's appearance settings
+- **Four sections, always in the same order**: **Questions** (follow-up suggestions, only
+  populated in Q&A mode), **External AI Insights** (free text pushed by an MCP client via
+  `onair_show_insight` — shows "No external AI insights yet" until then), **Pacing** (words-per-minute
+  coach), **Token Usage** (running prompt/completion token total) — separated by dividing lines,
+  each with its own empty-state placeholder
+- **Each section independently toggleable** — hide any of the 4 without closing the whole window,
+  from the Controller, Stream Deck, MCP, or Web Remote
+- **Session name** shown in the window, matching what the Pacing and Token Usage sections already
+  displayed before the window existed
+- Built for the same real-time-monitoring workflow as the Copilot-insight TP footer (see
+  [Q&A mode](#qa-mode) and [Remote control](#remote-control-stream-deck--ai-assistants)) but as a
+  dedicated, resizable surface you can park on a second monitor
 
 ### AI providers
 Configuring a provider's credentials is fully independent of which provider you're currently
@@ -216,28 +301,55 @@ provider's key:
 ### Remote control (Stream Deck & AI assistants)
 A local-only WebSocket server (Settings → REMOTE CONTROL, **on** by default — toggle to disable)
 lets other apps on your PC control onAIr, never reachable from the network:
-- **Elgato Stream Deck plugin** (`streamdeck-plugin/`) — 16 actions: toggle TP/lock/hide-in-share
+- **Elgato Stream Deck plugin** (`streamdeck-plugin/`) — 24 actions: toggle TP/lock/hide-in-share
   ×2/recording, an AI status tile, 4 momentary actions (release stealth, open file, scroll
-  up/down), and 6 dial-capable actions (opacity, font size, scroll speed ×2, scroll step, voice
-  sensitivity). Install via Settings → REMOTE CONTROL → **Install Stream Deck Plugin**.
+  up/down), 6 dial-capable actions (opacity, font size, scroll speed ×2, scroll step, voice
+  sensitivity), plus 8 AI Insights actions — open/lock/hide-in-share for the window itself, a
+  Pacing status tile, and 4 on/off toggles for its Questions/External AI Insights/Pacing/Token
+  Usage sections. Install via Settings → REMOTE CONTROL → **Install Stream Deck Plugin**.
 - **MCP server** (`mcp-server/`) — lets any Model Context Protocol client (Claude Desktop, VS
   Code Copilot Chat, etc.) control onAIr with natural language: "open the teleprompter", "set the
-  font color to blue", "load my demo script". 24 tools, each individually toggleable via
+  font color to blue", "load my demo script". 35 tools, each individually toggleable via
   Settings → REMOTE CONTROL → **MCP Tools & Setup…**, which also has a one-click **Copy MCP
-  Config** button for registering the server with your AI client.
+  Config** button for registering the server with your AI client. Alongside the original TP/Q&A
+  tools, a dedicated set controls the [AI Insights window](#ai-insights-window): open/lock/hide,
+  its own appearance (font size/opacity/color/family), and a toggle per section
+  (`onair_toggle_insights_show_questions/_external/_pacing/_token_usage`).
 - **Q&A monitoring + Copilot insights** — an MCP client can poll `onair_get_state` (or the more
   focused `onair_get_last_qa_turn`) to watch onAIr's Q&A activity in real time: the transcribed
   question, the AI's answer, a `qaTurnCount` counter that increments once per completed round
   (compare it to the last value you saw to detect a new turn without re-reading the same one),
-  the pacing summary, and follow-up suggestions. This is the seam an EXTERNAL monitoring agent
-  uses to watch a live presentation — cross-reference the question against other systems (CRM,
-  docs, past emails) and react. `onair_show_insight` then pushes a short note into a small
-  **Copilot-insight footer** on the TP itself — visible in BOTH Script and Q&A modes, deliberately
-  separate from the AI's own Q&A answer so the presenter always knows "what to tell the client"
-  (the Q&A answer) apart from "a private heads-up from my copilot" (the insight). Call
-  `onair_clear_insight` to remove it. The "brain" that decides WHEN to surface an insight and
-  what other data to cross-reference is entirely external to onAIr — these three tools are only
-  the collection + delivery mechanism.
+  the pacing summary, and follow-up suggestions — `onair_get_state` additionally reports the AI
+  Insights window's own open/lock/hide state and which of its 4 sections are currently shown. This
+  is the seam an EXTERNAL monitoring agent uses to watch a live presentation — cross-reference the
+  question against other systems (CRM, docs, past emails) and react. `onair_show_insight` then
+  pushes a short note that lands in **two** places at once: a small **Copilot-insight footer** on
+  the TP itself (visible in BOTH Script and Q&A modes, deliberately separate from the AI's own Q&A
+  answer so the presenter always knows "what to tell the client" apart from "a private heads-up
+  from my copilot") and the **External AI Insights** section of the separate
+  [AI Insights window](#ai-insights-window). Call `onair_clear_insight` to remove it. The "brain"
+  that decides WHEN to surface an insight and what other data to cross-reference is entirely
+  external to onAIr — these tools are only the collection + delivery mechanism.
+
+### Web Remote (browser control)
+A second, LAN-reachable remote surface alongside the loopback-only Stream Deck/MCP server — useful
+for controlling onAIr from a phone or tablet while presenting, with no extra software to install on
+that device:
+- **Settings → WEB REMOTE** — off by default; enabling it starts a small HTTP/WebSocket server
+  bound to all network interfaces (not just loopback) on a configurable port, serving a static
+  mobile-friendly control page plus the same op vocabulary the Stream Deck plugin uses
+- **PIN-protected** — every connection (page load and WebSocket upgrade) must present the current
+  PIN shown in Settings; regenerating the PIN instantly revokes every already-connected device,
+  with no server-side session store to clean up
+- **Four tabs**, mirroring the Controller: **Teleprompter** (open/lock/hide, opacity, font size,
+  scroll), **Q&A** (record, provider status), **AI Insights** (open/lock/hide the window plus the
+  same 4 section toggles as the Controller's AI Insights tab), and **App Stealth** (list + embed
+  windows — this and window listing are deliberately Web-Remote-exclusive, since they need a live
+  list of the presenter's own desktop windows)
+- **Windows networking** — reaching the server from another device requires either running onAIr
+  elevated once, or a one-time `netsh http add urlacl` reservation (Settings → WEB REMOTE →
+  **Grant Network Access** walks you through it); the static page itself needs no login, only the
+  WebSocket upgrade is PIN-checked
 
 ---
 
@@ -441,7 +553,7 @@ which do implement the standard `/v1/audio/transcriptions` path Local LM expects
 ## Knowledge base & glossary
 
 Two related, independent features that help transcription and answers use the right words and
-facts — both live in Controller → **Q&A tab → PROMPTS** (glossary) and **Settings tab →
+facts — both live in Controller → **Q&A tab → PROMPTS** (glossary) and **Q&A tab →
 KNOWLEDGE BASE** (reference documents). Both are off by default: completely inert until you
 actually set a glossary or attach a file.
 
@@ -548,38 +660,35 @@ All shortcuts are **global** — they work even when Teams, PowerPoint or Edge h
 
 ```
 onair-native/
-├── OnAirNative.sln
-├── OnAirNative/
-│   ├── OnAirNative.csproj          WinUI 3, unpackaged, x64, net8.0-windows10.0.19041.0
+├── OnAirNative.sln                 5 projects: app, shared core, unit + integration + MCP tests
+├── OnAirNative/                    WinUI 3 app, unpackaged, x64, net8.0-windows10.0.19041.0
 │   ├── Program.cs                  Custom Main — single-instance guard + activation redirect
 │   ├── App.xaml / App.xaml.cs      Service wiring, hotkey dispatch, window lifetime
 │   ├── GlobalUsings.cs             Shared implicit usings
 │   ├── Win32/NativeMethods.cs      P/Invoke (SetWindowDisplayAffinity, RegisterHotKey,
 │   │                               EnumWindows, SetParent, Shell_NotifyIcon, …)
-│   ├── Models/AppConfig.cs         Root config model (6 providers + appearance + theme + window state)
 │   ├── Helpers/Converters.cs       XAML value converters
 │   ├── Services/
-│   │   ├── ConfigService.cs        JSON persistence to %LocalAppData%, legacy folder migration
-│   │   ├── SecretProtector.cs      DPAPI encryption for API keys at rest
 │   │   ├── WindowService.cs        Win32 transparency / click-through / always-on-top / focus
 │   │   ├── HotkeyService.cs        RegisterHotKey on background thread + message loop
 │   │   ├── RemoteControlService.cs Loopback WebSocket server — Stream Deck plugin + MCP server
+│   │   ├── WebRemoteService.cs     LAN-reachable, PIN-protected WebSocket server (Web Remote)
 │   │   ├── AudioService.cs         NAudio WASAPI mic + loopback mixdown, RMS voice monitor
 │   │   ├── WhisperService.cs       whisper.net in-process + cloud API fallback
-│   │   ├── AiChatService.cs        6 AI providers via HttpClient
 │   │   ├── TrayService.cs          Shell_NotifyIcon system tray + context menu
 │   │   ├── StealthWindowService.cs EnumWindows window list + SetWindowDisplayAffinity
-│   │   ├── WindowEmbedService.cs   SetParent window embedding in stealth container
-│   │   └── UpdateService.cs        GitHub Releases check + installer download/launch
+│   │   └── WindowEmbedService.cs   SetParent window embedding in stealth container
 │   ├── ViewModels/                 MVVM via CommunityToolkit.Mvvm
 │   │   ├── OverlayViewModel.cs     TP: script, Q&A, scroll modes, recording
 │   │   ├── ControllerViewModel.cs  Tab sub-VM orchestrator, theme, protection toggles
 │   │   ├── ScrollTabViewModel.cs   Scroll settings, file loading, opacity/font
 │   │   ├── AiTabViewModel.cs       Provider selection, credentials, test connection
+│   │   ├── InsightsTabViewModel.cs AI Insights window controls + the 4 section toggles
 │   │   └── AboutTabViewModel.cs    Version, authors, GitHub link, update check/install
 │   ├── Views/
 │   │   ├── OverlayWindow.xaml      The TP: transparent window (mode label, Script + Q&A panels)
-│   │   ├── ControllerWindow.xaml   Controller (5-tab pill bar + footer)
+│   │   ├── ControllerWindow.xaml   Controller (6-tab pill bar + footer)
+│   │   ├── InsightWindow.xaml      The separate, resizable AI Insights overlay window
 │   │   └── Dialogs/
 │   │       ├── ProviderConfigDialog.xaml   Credential editor + test, per provider
 │   │       └── McpToolsDialog.xaml         MCP tool enable/disable + client config snippet
@@ -588,6 +697,23 @@ onair-native/
 │       ├── onair-remote.streamDeckPlugin   Bundled, packaged Stream Deck plugin
 │       ├── mcp-server/                     Bundled, published MCP server (OnAirMcp.dll + deps)
 │       └── screenshots/                    README screenshots
+├── OnAirNative.Core/                Shared library — config, AI, audio-analysis, no UI deps
+│   ├── Models/
+│   │   ├── AppConfig.cs             Root config model (7 providers + appearance + theme + window state)
+│   │   └── ScriptDocument.cs         Parsed script model
+│   └── Services/
+│       ├── ConfigService.cs         JSON persistence to %LocalAppData%, legacy folder migration
+│       ├── SecretProtector.cs       DPAPI encryption for API keys at rest
+│       ├── AiChatService.cs         7 AI providers via HttpClient
+│       ├── UpdateService.cs         GitHub Releases check + installer download/launch
+│       ├── KnowledgeBaseService.cs  Glossary/KB matching for Q&A context injection
+│       ├── PacingAnalyzer.cs        Words-per-minute tracking behind the Pacing section
+│       ├── QaSessionService.cs      Q&A turn history (conversation memory)
+│       └── ScriptParser.cs / AudioLevel.cs / VoiceActivityDetector.cs / WavReader.cs
+├── OnAirNative.Tests/                xUnit unit tests for OnAirNative.Core services
+├── OnAirNative.IntegrationTests/     xUnit tests driving a real onAIr.exe — RemoteControlService
+│                                     + WebRemoteService protocol coverage
+├── OnAirMcp.Tests/                   xUnit tests for ToolGate (per-tool enable/disable)
 ├── streamdeck-plugin/               Elgato Stream Deck plugin (Node/TypeScript)
 │   ├── com.souz4rafael.onair.sdPlugin/   manifest.json, icons, dial layout
 │   ├── src/                              onair-client.ts, plugin.ts, actions/
@@ -596,7 +722,7 @@ onair-native/
     ├── OnAirMcp.csproj             ModelContextProtocol + Microsoft.Extensions.Hosting
     ├── Program.cs                  stdio transport, tool discovery
     ├── OnAirClient.cs              WebSocket client to RemoteControlService
-    ├── OnAirTools.cs               21 MCP tools (onair_get_state, onair_toggle_tp, …)
+    ├── OnAirTools.cs               35 MCP tools (onair_get_state, onair_toggle_tp, …)
     └── ToolGate.cs                 Per-tool enable/disable, reads config.json directly
 ```
 
