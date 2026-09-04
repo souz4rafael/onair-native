@@ -155,7 +155,7 @@
                  so the selected pill naturally grows to fit icon+text and the rest shrink to
                  icon-only with zero manual column-width bookkeeping needed. Centered so the
                  cluster doesn't stretch to fill the card when Auto columns leave space unused. -->
-            <Grid x:Name="TabPillGrid" HorizontalAlignment="Center" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto">
+            <Grid x:Name="TabPillGrid" HorizontalAlignment="Center" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                 <Grid.ChildrenTransitions>
                     <TransitionCollection>
                         <RepositionThemeTransition/>
@@ -180,7 +180,16 @@
                         <TextBlock x:Name="TabQaText" Text="Q&amp;A"/>
                     </StackPanel>
                 </RadioButton>
-                <RadioButton x:Name="TabStealth" Grid.Column="2" Tag="stealth"
+                <RadioButton x:Name="TabInsights" Grid.Column="2" Tag="insights"
+                             GroupName="MainTabs" Style="{StaticResource PillSegment}"
+                             AutomationProperties.Name="AI Insights tab"
+                             Checked="MainTab_Checked">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xEA80;" FontSize="16"/>
+                        <TextBlock x:Name="TabInsightsText" Text="AI Insights"/>
+                    </StackPanel>
+                </RadioButton>
+                <RadioButton x:Name="TabStealth" Grid.Column="3" Tag="stealth"
                              GroupName="MainTabs" Style="{StaticResource PillSegment}"
                              AutomationProperties.Name="App Stealth tab"
                              Checked="MainTab_Checked">
@@ -189,7 +198,7 @@
                         <TextBlock x:Name="TabStealthText" Text="App Stealth"/>
                     </StackPanel>
                 </RadioButton>
-                <RadioButton x:Name="TabSettings" Grid.Column="3" Tag="settings"
+                <RadioButton x:Name="TabSettings" Grid.Column="4" Tag="settings"
                              GroupName="MainTabs" Style="{StaticResource PillSegment}"
                              AutomationProperties.Name="Settings tab"
                              Checked="MainTab_Checked">
@@ -198,7 +207,7 @@
                         <TextBlock x:Name="TabSettingsText" Text="Settings"/>
                     </StackPanel>
                 </RadioButton>
-                <RadioButton x:Name="TabAbout" Grid.Column="4" Tag="about"
+                <RadioButton x:Name="TabAbout" Grid.Column="5" Tag="about"
                              GroupName="MainTabs" Style="{StaticResource PillSegment}"
                              AutomationProperties.Name="About tab"
                              Checked="MainTab_Checked">
@@ -599,18 +608,10 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Card: Usage + conversation memory -->
+                    <!-- Card: conversation memory -->
                     <Border Style="{StaticResource CardBorderStyle}">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="USAGE &amp; CONVERSATION" Style="{StaticResource CardTitleStyle}"/>
-
-                            <TextBlock Text="Token usage (this session)" Style="{ThemeResource CaptionTextBlockStyle}"/>
-                            <TextBlock x:Name="UsageSummaryText"
-                                       FontSize="13"
-                                       TextWrapping="Wrap"/>
-                            <Button Content="Reset usage counter"
-                                    HorizontalAlignment="Stretch"
-                                    Click="ResetUsage_Click"/>
+                            <TextBlock Text="CONVERSATION MEMORY" Style="{StaticResource CardTitleStyle}"/>
 
                             <TextBlock Text="Q&amp;A conversation memory"
                                        Style="{ThemeResource CaptionTextBlockStyle}"/>
@@ -625,9 +626,103 @@
                             <Button Content="Clear conversation"
                                     HorizontalAlignment="Stretch"
                                     Click="ClearConversation_Click"/>
+                        </StackPanel>
+                    </Border>
 
-                            <TextBlock Text="Pacing (last answer)"
-                                       Style="{ThemeResource CaptionTextBlockStyle}"/>
+                </StackPanel>
+
+                <!-- ── AI Insights Tab ─────────────────────────────────── -->
+                <StackPanel x:Name="InsightsPanel" Spacing="14" Padding="16" Visibility="Collapsed">
+
+                    <!-- Card: Controls (moved here from the footer) -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="CONTROLS" Style="{StaticResource CardTitleStyle}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ToggleButton Translation="0,0,20" x:Name="InsightsToggle"
+                                              Content="💡 Open Insights"
+                                              FontSize="12"
+                                              ToolTipService.ToolTip="Show or hide the AI Insights window on this PC"
+                                              Checked="InsightsToggle_Checked"
+                                              Unchecked="InsightsToggle_Unchecked"/>
+
+                                <ToggleButton Translation="0,0,20" x:Name="InsightsLockToggle"
+                                              Content="🔒 Lock Insights"
+                                              FontSize="12"
+                                              ToolTipService.ToolTip="Lock or unlock the AI Insights window's position and size"
+                                              Checked="InsightsLockToggle_Checked"
+                                              Unchecked="InsightsLockToggle_Unchecked"/>
+
+                                <ToggleButton Translation="0,0,20" x:Name="InsightsProtectToggle"
+                                              Content="🙈 Hide Insights"
+                                              FontSize="12"
+                                              ToolTipService.ToolTip="Hide or show the AI Insights window while screen sharing"
+                                              Checked="InsightsProtectToggle_Checked"
+                                              Unchecked="InsightsProtectToggle_Unchecked"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Appearance — independent from the TP's own settings, see
+                         InsightAppearanceConfig's doc comment for why. -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="APPEARANCE" Style="{StaticResource CardTitleStyle}"/>
+
+                            <TextBlock Text="Font size" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <Slider x:Name="InsightFontSizeSlider" ValueChanged="InsightFontSizeSlider_ValueChanged"/>
+
+                            <TextBlock Text="Container opacity" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <Slider x:Name="InsightOpacitySlider" ValueChanged="InsightOpacitySlider_ValueChanged"/>
+
+                            <StackPanel Orientation="Horizontal" Spacing="24">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Font color" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button Translation="0,0,20" x:Name="InsightColorWhite"  Width="32" Height="32" CornerRadius="16" Background="#F0F0F0" Tag="#F0F0F0" Click="InsightFontColor_Click" ToolTipService.ToolTip="White"/>
+                                        <Button Translation="0,0,20" x:Name="InsightColorYellow" Width="32" Height="32" CornerRadius="16" Background="#FFE066" Tag="#FFE066" Click="InsightFontColor_Click" ToolTipService.ToolTip="Yellow"/>
+                                        <Button Translation="0,0,20" x:Name="InsightColorGreen"  Width="32" Height="32" CornerRadius="16" Background="#90EE90" Tag="#90EE90" Click="InsightFontColor_Click" ToolTipService.ToolTip="Green"/>
+                                        <Button Translation="0,0,20" x:Name="InsightColorCyan"   Width="32" Height="32" CornerRadius="16" Background="#7FFFD4" Tag="#7FFFD4" Click="InsightFontColor_Click" ToolTipService.ToolTip="Aqua"/>
+                                        <Button Translation="0,0,20" x:Name="InsightColorOrange" Width="32" Height="32" CornerRadius="16" Background="#FFA07A" Tag="#FFA07A" Click="InsightFontColor_Click" ToolTipService.ToolTip="Orange"/>
+                                        <Button Translation="0,0,20" x:Name="InsightColorPink"   Width="32" Height="32" CornerRadius="16" Background="#FFB6C1" Tag="#FFB6C1" Click="InsightFontColor_Click" ToolTipService.ToolTip="Pink"/>
+                                        <TextBox x:Name="InsightCustomColorBox"
+                                                 Width="72" Height="32"
+                                                 FontSize="12"
+                                                 PlaceholderText="#RRGGBB"
+                                                 MaxLength="7"
+                                                 VerticalAlignment="Center"
+                                                 KeyDown="InsightCustomColorBox_KeyDown"
+                                                 ToolTipService.ToolTip="Custom color (hex)"/>
+                                        <Button Translation="0,0,20"
+                                                Content="Apply"
+                                                Height="32"
+                                                Padding="8,0"
+                                                FontSize="12"
+                                                VerticalAlignment="Center"
+                                                Click="InsightApplyCustomColor_Click"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="InsightCustomColorErrorText"
+                                               FontSize="11"
+                                               Foreground="#FF6B6B"
+                                               Text=""
+                                               Visibility="Collapsed"/>
+                                </StackPanel>
+
+                                <StackPanel Spacing="8" Width="220">
+                                    <TextBlock Text="Font family" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                                    <ComboBox x:Name="InsightFontFamilyCombo"
+                                              HorizontalAlignment="Stretch"
+                                              SelectionChanged="InsightFontFamilyCombo_SelectionChanged"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Pacing (moved from Q&A) -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="PACING" Style="{StaticResource CardTitleStyle}"/>
+                            <TextBlock Text="Pacing (last answer)" Style="{ThemeResource CaptionTextBlockStyle}"/>
                             <TextBlock x:Name="PacingSummaryText"
                                        FontSize="13"
                                        TextWrapping="Wrap"
@@ -636,6 +731,50 @@
                                        Opacity="0.7"
                                        TextWrapping="Wrap"
                                        Text="A rough words-per-minute estimate for your last recorded question, based on actual speaking time (pauses excluded). A gentle guide, not a strict rule — presenter-side only, never shown on the TP."/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Token usage (moved from Q&A) -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="TOKEN USAGE" Style="{StaticResource CardTitleStyle}"/>
+                            <TextBlock Text="Token usage (this session)" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="UsageSummaryText"
+                                       FontSize="13"
+                                       TextWrapping="Wrap"/>
+                            <Button Content="Reset usage counter"
+                                    HorizontalAlignment="Stretch"
+                                    Click="ResetUsage_Click"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Q&A recap -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="Q&amp;A RECAP" Style="{StaticResource CardTitleStyle}"/>
+                            <TextBlock Text="Last question" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="InsightQaQuestionText"
+                                       FontSize="13"
+                                       TextWrapping="Wrap"
+                                       Opacity="0.85"
+                                       Text="No question yet."/>
+                            <TextBlock Text="Last answer" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBlock x:Name="InsightQaAnswerText"
+                                       FontSize="13"
+                                       TextWrapping="Wrap"
+                                       Text="No answer yet."/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Card: Follow-up suggestions -->
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="FOLLOW-UP SUGGESTIONS" Style="{StaticResource CardTitleStyle}"/>
+                            <TextBlock FontSize="12"
+                                       Opacity="0.7"
+                                       TextWrapping="Wrap"
+                                       Text="Enable 'Suggest questions to ask the client' in the Q&amp;A tab's Prompts card to populate this after each answer."/>
+                            <StackPanel x:Name="InsightFollowUpSuggestionsPanel" Spacing="4"/>
                         </StackPanel>
                     </Border>
 

@@ -90,6 +90,19 @@ public class AppearanceConfig
     public double VoiceRmsThreshold { get; set; } = 5.0;  // lowered from 15 — easier to trigger
 }
 
+/// <summary>Appearance settings for the "AI Insights" window/tab — deliberately independent from
+/// <see cref="AppearanceConfig"/> (the TP's own settings) so the presenter can style each
+/// container differently (e.g. a larger, high-contrast Insights window on a second monitor while
+/// the TP stays compact). No scroll-related fields here — Insights content never scrolls via
+/// step/speed controls, only its own ScrollViewer.</summary>
+public class InsightAppearanceConfig
+{
+    public int    Opacity    { get; set; } = 85;
+    public int    FontSize   { get; set; } = 16;
+    public string FontColor  { get; set; } = "#f0f0f0";
+    public string FontFamily { get; set; } = "Segoe UI";
+}
+
 // ── Persisted window geometry ─────────────────────────────────────────────────
 
 public class WindowState
@@ -173,17 +186,30 @@ public class AppConfig
     // UI / appearance
     public AppearanceConfig Appearance { get; set; } = new();
 
+    /// <summary>Independent appearance settings for the "AI Insights" tab/window — see
+    /// <see cref="InsightAppearanceConfig"/>'s own doc comment for why this is separate from
+    /// <see cref="Appearance"/>.</summary>
+    public InsightAppearanceConfig InsightAppearance { get; set; } = new();
+
     /// <summary>Controller window color theme: "System" | "Light" | "Dark".</summary>
     public string Theme { get; set; } = "System";
 
     // Persisted window positions
     public WindowState OverlayWindow     { get; set; } = new() { X = 80,  Y = 40,  Width = 720, Height = 300 };
     public WindowState ControllerWindow  { get; set; } = new() { X = 50,  Y = 80,  Width = 600, Height = 640 };
+    // The "AI Insights" window — a separate, freely resizable panel (independent from the TP)
+    // that shows the same Copilot-insight text an external MCP agent pushes. Only Width/Height
+    // are ever restored (see InsightWindow.OnFirstActivated for why X/Y are not); X/Y here just
+    // give it a sensible first-run default distinct from the TP's own (also-fixed) position.
+    public WindowState InsightWindow     { get; set; } = new() { X = 820, Y = 40,  Width = 380, Height = 280 };
 
     // Content protection: hide overlay from screen share (default on)
     public bool OverlayProtected    { get; set; } = true;
     // Content protection: hide controller from screen share (default off)
     public bool ControllerProtected { get; set; } = false;
+    // Content protection: hide the AI Insights window from screen share (default off — it's a
+    // private aid the presenter reads from, same default posture as the Controller).
+    public bool InsightWindowProtected { get; set; } = false;
 
     /// <summary>Whether the Remote Control WebSocket server (RemoteControlService, loopback-only,
     /// port 47823) should be running — gates BOTH the Stream Deck plugin and the MCP server, since

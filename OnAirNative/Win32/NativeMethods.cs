@@ -251,7 +251,10 @@ internal static partial class NativeMethods
     internal const uint VK_RIGHT      = 0x27;
     internal const uint VK_DOWN       = 0x28;
     internal const uint VK_H          = 0x48;
+    internal const uint VK_I          = 0x49;
+    internal const uint VK_L          = 0x4C;
     internal const uint VK_O          = 0x4F;
+    internal const uint VK_P          = 0x50;
     internal const uint VK_R          = 0x52;
     internal const uint VK_S          = 0x53;
     internal const uint VK_U          = 0x55;

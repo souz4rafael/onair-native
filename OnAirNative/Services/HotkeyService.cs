@@ -32,6 +32,9 @@ public enum HotkeyAction
     /// (through <see cref="RemoteControlService"/>). Included in this enum anyway since it's
     /// the shared command vocabulary for both physical hotkeys and remote control.</summary>
     RecheckWhisperModel,
+    ToggleInsightsVisibility,
+    ToggleInsightsLock,
+    ToggleInsightsCaptureProtection,
 }
 
 /// <summary>
@@ -61,6 +64,9 @@ public enum HotkeyAction
 ///   Ctrl+Alt+Left  → DecreaseScrollStep (Manual mode)
 ///   Ctrl+Alt+'     → IncreaseVoiceThreshold (Voice scroll sensitivity)
 ///   Ctrl+Alt+;     → DecreaseVoiceThreshold (Voice scroll sensitivity)
+///   Ctrl+Alt+I     → ToggleInsightsVisibility (show/hide the AI Insights window)
+///   Ctrl+Alt+L     → ToggleInsightsLock (lock/unlock the AI Insights window)
+///   Ctrl+Alt+P     → ToggleInsightsCaptureProtection (AI Insights visible/hidden in share)
 ///
 /// Note: Ctrl+Alt+Arrow is, on some machines, also bound by legacy Intel/NVIDIA graphics
 /// driver control panels to rotate the display. If that binding claims the combo first,
@@ -95,6 +101,9 @@ public sealed class HotkeyService : IDisposable
     private const int ID_SCROLL_STEP_DOWN                = 19;
     private const int ID_VOICE_THRESHOLD_UP              = 20;
     private const int ID_VOICE_THRESHOLD_DOWN            = 21;
+    private const int ID_INSIGHTS_VISIBILITY             = 22;
+    private const int ID_INSIGHTS_LOCK                   = 23;
+    private const int ID_INSIGHTS_CAPTURE_PROTECTION     = 24;
 
     private readonly DispatcherQueue _uiQueue;
     private Thread?  _thread;
@@ -167,6 +176,9 @@ public sealed class HotkeyService : IDisposable
             Register(ID_SCROLL_STEP_DOWN,             NativeMethods.VK_LEFT);
             Register(ID_VOICE_THRESHOLD_UP,           NativeMethods.VK_OEM_7);
             Register(ID_VOICE_THRESHOLD_DOWN,         NativeMethods.VK_OEM_1);
+            Register(ID_INSIGHTS_VISIBILITY,          NativeMethods.VK_I);
+            Register(ID_INSIGHTS_LOCK,                NativeMethods.VK_L);
+            Register(ID_INSIGHTS_CAPTURE_PROTECTION,  NativeMethods.VK_P);
 
             // Pump messages until WM_QUIT
             while (NativeMethods.GetMessage(out var msg, IntPtr.Zero, 0, 0))
@@ -178,7 +190,7 @@ public sealed class HotkeyService : IDisposable
         finally
         {
             // Cleanup hotkeys and window
-            for (int id = ID_SCROLL_UP; id <= ID_VOICE_THRESHOLD_DOWN; id++)
+            for (int id = ID_SCROLL_UP; id <= ID_INSIGHTS_CAPTURE_PROTECTION; id++)
                 NativeMethods.UnregisterHotKey(_hwnd, id);
 
             if (_hwnd != IntPtr.Zero) NativeMethods.DestroyWindow(_hwnd);
@@ -219,6 +231,9 @@ public sealed class HotkeyService : IDisposable
                     ID_SCROLL_STEP_DOWN                   => HotkeyAction.DecreaseScrollStep,
                     ID_VOICE_THRESHOLD_UP                 => HotkeyAction.IncreaseVoiceThreshold,
                     ID_VOICE_THRESHOLD_DOWN               => HotkeyAction.DecreaseVoiceThreshold,
+                    ID_INSIGHTS_VISIBILITY                 => HotkeyAction.ToggleInsightsVisibility,
+                    ID_INSIGHTS_LOCK                       => HotkeyAction.ToggleInsightsLock,
+                    ID_INSIGHTS_CAPTURE_PROTECTION         => HotkeyAction.ToggleInsightsCaptureProtection,
                     _                                     => null,
                 };
                 if (action.HasValue)

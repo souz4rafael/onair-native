@@ -60,6 +60,11 @@ public partial class OverlayViewModel : ObservableObject
     // opt-in toggle needed): it costs nothing beyond a bit of local CPU crunching on bytes
     // already in memory, unlike follow-up suggestions' real extra AI-call cost.
     [ObservableProperty] private string _pacingSummary = "No pacing data yet.";
+    /// <summary>"None" | "Slow" | "Good" | "Fast" — mirrors <see cref="PacingLevel"/> exactly
+    /// (or "None" when there's no estimate yet/not enough data). Kept separate from
+    /// <see cref="PacingSummary"/>'s free English text so machine consumers (RemoteState /
+    /// Stream Deck's color-coded pacing tile) don't need to parse a sentence.</summary>
+    [ObservableProperty] private string _pacingLevel  = "None";
 
     // Conversation memory across consecutive Q&A recordings — each successful answer appends
     // a turn here, and it's passed back into every subsequent GetAnswerAsync call so follow-up
@@ -559,6 +564,7 @@ public partial class OverlayViewModel : ObservableObject
         PacingSummary = pacing is null
             ? "Not enough data for a pace estimate."
             : $"{pacing.WordsPerMinute:F0} words/min — {pacing.Feedback} ({pacing.WordCount} words over {pacing.SpeakingSeconds:F0}s of speech)";
+        PacingLevel = pacing?.Level.ToString() ?? "None";
     }
 
     /// <summary>Shared "call the AI, update state" tail for a completed Q&amp;A turn — extracted

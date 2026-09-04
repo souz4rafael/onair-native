@@ -6,9 +6,10 @@ namespace OnAirNative.ViewModels;
 /// <summary>Root ViewModel for the Controller window — owns the tab sub-VMs.</summary>
 public partial class ControllerViewModel : ObservableObject
 {
-    public ScrollTabViewModel  ScrollTab { get; }
-    public AiTabViewModel      AiTab     { get; }
-    public AboutTabViewModel   AboutTab  { get; }
+    public ScrollTabViewModel    ScrollTab    { get; }
+    public AiTabViewModel        AiTab        { get; }
+    public InsightsTabViewModel  InsightsTab  { get; }
+    public AboutTabViewModel     AboutTab     { get; }
 
     [ObservableProperty] private bool _controllerProtected;
     [ObservableProperty] private bool _overlayProtected;
@@ -33,9 +34,10 @@ public partial class ControllerViewModel : ObservableObject
         Theme                = config.Current.Theme;
         RemoteControlEnabled = config.Current.RemoteControlEnabled;
 
-        ScrollTab = new ScrollTabViewModel(config, overlay);
-        AiTab     = new AiTabViewModel(config, ai, whisper);
-        AboutTab  = new AboutTabViewModel(update);
+        ScrollTab   = new ScrollTabViewModel(config, overlay);
+        AiTab       = new AiTabViewModel(config, ai, whisper);
+        InsightsTab = new InsightsTabViewModel(config);
+        AboutTab    = new AboutTabViewModel(update);
     }
 
     partial void OnControllerProtectedChanged(bool value)

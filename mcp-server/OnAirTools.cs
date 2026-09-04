@@ -44,14 +44,14 @@ public static class OnAirTools
         return "onAIr is running and reachable.";
     });
 
-    [McpServerTool(Name = "onair_get_state"), Description("Gets the full current state of onAIr: whether the teleprompter (TP) is open, locked, or hidden from screen share; whether the Controller window is hidden from screen share; recording status; the active AI chat provider; Whisper transcription model status (local vs cloud); font size, color, and family; teleprompter opacity; scroll mode (Manual/Auto/Voice) and its speed/step settings; the loaded script's filename; AND Q&A monitoring fields — the most recent question/answer, a turn counter that increments each completed Q&A round (poll this to detect new activity), the pacing (words-per-minute) summary, follow-up suggestions, whether a Q&A session recording is active, and the current Copilot-insight footer text. Use this before deciding what action to take, to answer any status question, or to monitor for new Q&A activity.")]
+    [McpServerTool(Name = "onair_get_state"), Description("Gets the full current state of onAIr: whether the teleprompter (TP) is open, locked, or hidden from screen share; whether the Controller window is hidden from screen share; recording status; the active AI chat provider; Whisper transcription model status (local vs cloud); font size, color, and family; teleprompter opacity; scroll mode (Manual/Auto/Voice) and its speed/step settings; the loaded script's filename; Q&A monitoring fields — the most recent question/answer, a turn counter that increments each completed Q&A round (poll this to detect new activity), the pacing (words-per-minute) summary and its coarse level (None/Slow/Good/Fast), follow-up suggestions, whether a Q&A session recording is active, and the current Copilot-insight footer text; AND the separate AI Insights window's own state — whether it's open, locked, or hidden from screen share, and its independent font size/opacity/font family. Use this before deciding what action to take, to answer any status question, or to monitor for new Q&A activity.")]
     public static Task<string> OnairGetState() => SafeAsync("onair_get_state", async () =>
     {
         var state = await OnAirClient.Instance.GetStateAsync();
         return JsonSerializer.Serialize(state, PrettyJson);
     });
 
-    [McpServerTool(Name = "onair_get_last_qa_turn"), Description("Gets the most recently completed Q&A round: the transcribed question, the AI's answer, a turn counter (increments once per completed round — remember the last value you saw and compare to detect a NEW turn without re-reading the same one), the pacing (words-per-minute) summary, and follow-up question suggestions (if enabled). Use this to monitor onAIr's Q&A activity in real time, e.g. polling every few seconds during a live presentation to react to new questions as they're answered.")]
+    [McpServerTool(Name = "onair_get_last_qa_turn"), Description("Gets the most recently completed Q&A round: the transcribed question, the AI's answer, a turn counter (increments once per completed round — remember the last value you saw and compare to detect a NEW turn without re-reading the same one), the pacing (words-per-minute) summary plus its coarse level (None/Slow/Good/Fast), and follow-up question suggestions (if enabled). Use this to monitor onAIr's Q&A activity in real time, e.g. polling every few seconds during a live presentation to react to new questions as they're answered.")]
     public static Task<string> OnairGetLastQaTurn() => SafeAsync("onair_get_last_qa_turn", async () =>
     {
         var state = await OnAirClient.Instance.GetStateAsync();
@@ -61,6 +61,7 @@ public static class OnAirTools
             state.LastQuestion,
             state.LastAnswer,
             state.PacingSummary,
+            state.PacingLevel,
             state.FollowUpSuggestions,
             state.QaSessionActive,
         }, PrettyJson);
@@ -102,6 +103,27 @@ public static class OnAirTools
     {
         await OnAirClient.Instance.SendCommandAsync("ToggleControllerCaptureProtection");
         return "Toggled Controller visibility in screen share.";
+    });
+
+    [McpServerTool(Name = "onair_toggle_insights"), Description("Opens the separate AI Insights window if it's currently closed, or closes it if it's currently open. This is the resizable window that mirrors the Copilot-insight footer plus pacing, Q&A recap, and follow-up suggestions. Toggles the current state.")]
+    public static Task<string> OnairToggleInsights() => SafeAsync("onair_toggle_insights", async () =>
+    {
+        await OnAirClient.Instance.SendCommandAsync("ToggleInsightsVisibility");
+        return "Toggled the AI Insights window open/closed.";
+    });
+
+    [McpServerTool(Name = "onair_toggle_insights_lock"), Description("Locks the AI Insights window in place (click-through, can't be accidentally moved) if unlocked, or unlocks it (movable/resizable) if locked. Toggles the current state.")]
+    public static Task<string> OnairToggleInsightsLock() => SafeAsync("onair_toggle_insights_lock", async () =>
+    {
+        await OnAirClient.Instance.SendCommandAsync("ToggleInsightsLock");
+        return "Toggled the AI Insights window lock.";
+    });
+
+    [McpServerTool(Name = "onair_toggle_insights_hide"), Description("Toggles whether the AI Insights window is hidden from screen sharing/recording — useful when going live on a shared screen. Toggles the current state.")]
+    public static Task<string> OnairToggleInsightsHide() => SafeAsync("onair_toggle_insights_hide", async () =>
+    {
+        await OnAirClient.Instance.SendCommandAsync("ToggleInsightsCaptureProtection");
+        return "Toggled AI Insights window visibility in screen share.";
     });
 
     [McpServerTool(Name = "onair_toggle_recording"), Description("Starts audio recording/Q&A capture in onAIr if stopped, or stops it if currently recording. Toggles the current state.")]
@@ -199,6 +221,42 @@ public static class OnAirTools
         {
             var (success, error) = await OnAirClient.Instance.SetFieldAsync("VoiceThreshold", threshold);
             return success ? $"Voice sensitivity threshold set to {threshold}." : $"Could not set voice threshold: {error}";
+        });
+
+    [McpServerTool(Name = "onair_set_insight_font_size"), Description("Sets the AI Insights window's text font size, in points.")]
+    public static Task<string> OnairSetInsightFontSize(
+        [Description("Font size in points")] int size)
+        => SafeAsync("onair_set_insight_font_size", async () =>
+        {
+            var (success, error) = await OnAirClient.Instance.SetFieldAsync("InsightFontSize", size);
+            return success ? $"AI Insights font size set to {size}." : $"Could not set AI Insights font size: {error}";
+        });
+
+    [McpServerTool(Name = "onair_set_insight_opacity"), Description("Sets the AI Insights window's opacity as a percentage.")]
+    public static Task<string> OnairSetInsightOpacity(
+        [Description("Opacity percentage, 0-100")] double opacityPercent)
+        => SafeAsync("onair_set_insight_opacity", async () =>
+        {
+            var (success, error) = await OnAirClient.Instance.SetFieldAsync("InsightOpacity", opacityPercent);
+            return success ? $"AI Insights opacity set to {opacityPercent}%." : $"Could not set AI Insights opacity: {error}";
+        });
+
+    [McpServerTool(Name = "onair_set_insight_font_color"), Description("Sets the AI Insights window's text color, as a hex color code.")]
+    public static Task<string> OnairSetInsightFontColor(
+        [Description("Hex color code, e.g. #FF8800")] string hexColor)
+        => SafeAsync("onair_set_insight_font_color", async () =>
+        {
+            var (success, error) = await OnAirClient.Instance.SetFieldAsync("InsightFontColor", hexColor);
+            return success ? $"AI Insights font color set to {hexColor}." : $"Could not set AI Insights font color: {error}";
+        });
+
+    [McpServerTool(Name = "onair_set_insight_font_family"), Description("Sets the AI Insights window's text font family. Must be a font actually installed on this PC — call onair_list_fonts first if unsure of the exact name.")]
+    public static Task<string> OnairSetInsightFontFamily(
+        [Description("Installed font family name, e.g. Consolas")] string fontFamily)
+        => SafeAsync("onair_set_insight_font_family", async () =>
+        {
+            var (success, error) = await OnAirClient.Instance.SetFieldAsync("InsightFontFamily", fontFamily);
+            return success ? $"AI Insights font family set to {fontFamily}." : $"Could not set AI Insights font family: {error}";
         });
 
     [McpServerTool(Name = "onair_recheck_whisper_model"), Description("Re-checks whether onAIr's local Whisper transcription model is currently loaded, refreshing the local-vs-cloud status shown in onAIr's AI tab.")]

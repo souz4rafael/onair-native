@@ -21,6 +21,25 @@ export interface RemoteState {
 	scrollMode: string;
 	fontFamily: string;
 	loadedScriptName: string;
+
+	// ── Q&A monitoring + Copilot insights (Block 6) ───────────────────────────
+	lastQuestion: string;
+	lastAnswer: string;
+	qaTurnCount: number;
+	pacingSummary: string;
+	/** "None" | "Slow" | "Good" | "Fast" */
+	pacingLevel: string;
+	followUpSuggestions: string[];
+	qaSessionActive: boolean;
+	insightText: string;
+
+	// ── AI Insights window (separate resizable Controller-tab-driven window) ─
+	insightsOpen: boolean;
+	insightsLocked: boolean;
+	insightsHiddenInShare: boolean;
+	insightFontSize: number;
+	insightOpacity: number;
+	insightFontFamily: string;
 }
 
 /** Mirrors OnAirNative.Services.HotkeyAction — the shared command vocabulary between the
@@ -47,7 +66,10 @@ export type OnAirAction =
 	| "DecreaseScrollStep"
 	| "IncreaseVoiceThreshold"
 	| "DecreaseVoiceThreshold"
-	| "RecheckWhisperModel";
+	| "RecheckWhisperModel"
+	| "ToggleInsightsVisibility"
+	| "ToggleInsightsLock"
+	| "ToggleInsightsCaptureProtection";
 
 const PORT = 47823;
 const RECONNECT_DELAY_MS = 2000;

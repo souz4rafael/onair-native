@@ -377,6 +377,99 @@
                     "TitleAlignment": "bottom"
                 }
             ]
+        },
+        {
+            "Name": "Open / Close AI Insights",
+            "UUID": "com.souz4rafael.onair.toggle-insights",
+            "Icon": "imgs/actions/toggle-insights/icon",
+            "Tooltip": "Toggles the AI Insights window open or hidden. Icon reflects the window's current state.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/toggle-insights/closed",
+                    "Name": "Closed",
+                    "Title": "Open Insights",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                },
+                {
+                    "Image": "imgs/actions/toggle-insights/open",
+                    "Name": "Open",
+                    "Title": "Close Insights",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Lock / Unlock AI Insights",
+            "UUID": "com.souz4rafael.onair.lock-insights",
+            "Icon": "imgs/actions/lock-insights/icon",
+            "Tooltip": "Locks the AI Insights window (click-through, drag/resize disabled) or unlocks it for repositioning. Icon reflects the current lock state.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/lock-insights/unlocked",
+                    "Name": "Unlocked",
+                    "Title": "Lock Insights",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                },
+                {
+                    "Image": "imgs/actions/lock-insights/locked",
+                    "Name": "Locked",
+                    "Title": "Unlock Insights",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Hide AI Insights in Share",
+            "UUID": "com.souz4rafael.onair.hide-insights-share",
+            "Icon": "imgs/actions/hide-insights-share/icon",
+            "Tooltip": "Toggles whether the AI Insights window is visible to viewers of a shared screen/recording — matches the Insights tab's own 'Hide' footer button. Icon reflects the current state.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/hide-insights-share/visible",
+                    "Name": "Visible",
+                    "Title": "Hide Insights",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                },
+                {
+                    "Image": "imgs/actions/hide-insights-share/hidden",
+                    "Name": "Hidden",
+                    "Title": "Show Insights",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
+        },
+        {
+            "Name": "Pacing Status",
+            "UUID": "com.souz4rafael.onair.pacing-status",
+            "Icon": "imgs/actions/pacing-status/icon",
+            "Tooltip": "Shows the most recent Q&A recording's speaking-pace status as a color-coded gauge: gray = not enough data yet, yellow = a bit slow, green = good pace, red = a bit fast. Read-only — nothing happens on press.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "States": [
+                {
+                    "Image": "imgs/actions/pacing-status/none",
+                    "Name": "Pacing",
+                    "Title": "Pace",
+                    "TitleAlignment": "bottom",
+                    "ShowTitle": false
+                }
+            ]
         }
     ]
 }

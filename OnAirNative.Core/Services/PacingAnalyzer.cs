@@ -3,7 +3,14 @@ namespace OnAirNative.Services;
 /// <summary>Result of a pacing analysis — null from <see cref="PacingAnalyzer.Analyze"/> itself
 /// means "not enough data for a meaningful estimate" (too few words, too little detected
 /// speaking time, or an unparseable/empty recording), never a wrong or misleading number.</summary>
-public sealed record PacingResult(int WordCount, double SpeakingSeconds, double WordsPerMinute, string Feedback);
+public sealed record PacingResult(int WordCount, double SpeakingSeconds, double WordsPerMinute, string Feedback, PacingLevel Level);
+
+/// <summary>Coarse pacing classification mirroring <see cref="PacingAnalyzer"/>'s WPM thresholds —
+/// exposed separately from the free-text Feedback so callers (RemoteState / Stream Deck) can
+/// render a simple color-coded status without parsing English sentences. There's no "no data"
+/// member here on purpose: that case is represented by <see cref="PacingResult"/> itself being
+/// null, not by a level value.</summary>
+public enum PacingLevel { Slow, Good, Fast }
 
 /// <summary>
 /// Estimates the presenter's speaking pace (words per minute) for a completed Q&amp;A recording,
@@ -65,14 +72,20 @@ public static class PacingAnalyzer
             return null;
 
         var wpm = wordCount / (speakingSeconds / 60.0);
-        var feedback = wpm switch
+        var level = wpm switch
         {
-            < SlowWpmThreshold => "a bit slow — consider picking it up slightly",
-            > FastWpmThreshold => "a bit fast — consider slowing down for clarity",
-            _                  => "good",
+            < SlowWpmThreshold => PacingLevel.Slow,
+            > FastWpmThreshold => PacingLevel.Fast,
+            _                  => PacingLevel.Good,
+        };
+        var feedback = level switch
+        {
+            PacingLevel.Slow => "a bit slow — consider picking it up slightly",
+            PacingLevel.Fast => "a bit fast — consider slowing down for clarity",
+            _                => "good",
         };
 
-        return new PacingResult(wordCount, speakingSeconds, wpm, feedback);
+        return new PacingResult(wordCount, speakingSeconds, wpm, feedback, level);
     }
 
     private static int CountWords(string text) =>

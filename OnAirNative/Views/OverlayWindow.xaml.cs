@@ -111,10 +111,9 @@ public sealed partial class OverlayWindow : Window
                 case nameof(OverlayViewModel.IsRecording):
                     // Recording state shown in Controller — no button in overlay
                     break;
-                case nameof(OverlayViewModel.InsightText):
-                    InsightTextBlock.Text   = ViewModel.InsightText;
-                    InsightFooter.Visibility = string.IsNullOrEmpty(ViewModel.InsightText) ? Visibility.Collapsed : Visibility.Visible;
-                    break;
+                // InsightText is no longer rendered here — it now lives in the separate,
+                // freely resizable InsightWindow (see App.xaml.cs), which observes this same
+                // ViewModel instance directly instead of going through this switch.
             }
         };
 

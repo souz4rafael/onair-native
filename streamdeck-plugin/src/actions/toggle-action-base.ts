@@ -1,7 +1,15 @@
 import { SingletonAction, type KeyDownEvent, type WillAppearEvent } from "@elgato/streamdeck";
 import { onairClient, type OnAirAction, type RemoteState } from "../onair-client.js";
 
-type BoolStateField = "tpOpen" | "tpLocked" | "tpHiddenInShare" | "controllerHiddenInShare" | "recording";
+type BoolStateField =
+	| "tpOpen"
+	| "tpLocked"
+	| "tpHiddenInShare"
+	| "controllerHiddenInShare"
+	| "recording"
+	| "insightsOpen"
+	| "insightsLocked"
+	| "insightsHiddenInShare";
 
 /**
  * Shared base for the 5 plain toggle actions (Open/Hide TP, Lock/Unlock TP, Hide TP in Share,

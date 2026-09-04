@@ -17,6 +17,10 @@ import { ScrollSpeedDialAction } from "./actions/dial-scroll-speed.js";
 import { VoiceScrollSpeedDialAction } from "./actions/dial-voice-scroll-speed.js";
 import { ScrollStepDialAction } from "./actions/dial-scroll-step.js";
 import { VoiceThresholdDialAction } from "./actions/dial-voice-threshold.js";
+import { ToggleInsightsAction } from "./actions/toggle-insights.js";
+import { LockInsightsAction } from "./actions/lock-insights.js";
+import { HideInsightsShareAction } from "./actions/hide-insights-share.js";
+import { PacingStatusAction } from "./actions/pacing-status.js";
 
 streamDeck.logger.setLevel("info");
 
@@ -36,6 +40,10 @@ streamDeck.actions.registerAction(new ScrollSpeedDialAction());
 streamDeck.actions.registerAction(new VoiceScrollSpeedDialAction());
 streamDeck.actions.registerAction(new ScrollStepDialAction());
 streamDeck.actions.registerAction(new VoiceThresholdDialAction());
+streamDeck.actions.registerAction(new ToggleInsightsAction());
+streamDeck.actions.registerAction(new LockInsightsAction());
+streamDeck.actions.registerAction(new HideInsightsShareAction());
+streamDeck.actions.registerAction(new PacingStatusAction());
 
 streamDeck.connect();
 

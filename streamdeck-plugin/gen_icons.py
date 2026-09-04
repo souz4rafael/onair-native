@@ -34,6 +34,8 @@ ACCENTS = {
     "violet": ((167, 139, 250, 255), (124, 58, 237, 255)),   # dial-scroll-step
     "gold":   ((250, 204, 21, 255), (202, 138, 4, 255)),     # dial-voice-threshold
     "green":  ((74, 222, 128, 255), (22, 163, 74, 255)),     # scroll-up / scroll-down
+    "yellow": ((253, 224, 71, 255), (234, 179, 8, 255)),     # toggle-insights (open/glow)
+    "indigo": ((129, 140, 248, 255), (79, 70, 229, 255)),    # lock-insights
 }
 
 
@@ -191,6 +193,51 @@ def draw_control_panel(draw, cx, cy, s, hidden):
         draw.line([left - pad, top + h + pad, left + w + pad, top - pad], fill=WHITE, width=lw + 2)
 
 
+def draw_lightbulb(draw, cx, cy, s, filled, hidden=False):
+    """Lightbulb glyph for the AI Insights window actions: bulb circle + screw-thread base.
+    `filled` fills the bulb solid white and adds radiating glow rays (the "on"/open state);
+    otherwise the bulb is outline-only (the "off"/closed state). `hidden` overlays a diagonal
+    slash, mirroring the eye/control-panel glyphs' own crossed-out "hidden" convention so all
+    three "hidden from share" actions share a consistent visual language."""
+    bulb_r = s * 0.20
+    bulb_cy = cy - s * 0.10
+    lw = max(3, int(s * 0.05))
+    base_w = bulb_r * 1.15
+    base_top = bulb_cy + bulb_r * 0.62
+    base_h = s * 0.16
+    thread_lw = max(2, int(s * 0.02))
+
+    if filled:
+        draw.ellipse([cx - bulb_r, bulb_cy - bulb_r, cx + bulb_r, bulb_cy + bulb_r], fill=WHITE)
+        draw.rounded_rectangle([cx - base_w / 2, base_top, cx + base_w / 2, base_top + base_h],
+                                radius=s * 0.02, fill=WHITE)
+        thread_color = tuple(list(NEUTRAL_DARK[:3]) + [220])
+        for frac in (0.32, 0.64):
+            y = base_top + base_h * frac
+            draw.line([cx - base_w / 2 + s * 0.015, y, cx + base_w / 2 - s * 0.015, y],
+                       fill=thread_color, width=thread_lw)
+        ray_inner, ray_outer = bulb_r * 1.15, bulb_r * 1.55
+        for ang_deg in (-150, -120, -90, -60, -30, 0, 180):
+            theta = math.radians(ang_deg)
+            x1, y1 = cx + ray_inner * math.cos(theta), bulb_cy + ray_inner * math.sin(theta)
+            x2, y2 = cx + ray_outer * math.cos(theta), bulb_cy + ray_outer * math.sin(theta)
+            draw.line([x1, y1, x2, y2], fill=WHITE, width=thread_lw)
+    else:
+        draw.ellipse([cx - bulb_r, bulb_cy - bulb_r, cx + bulb_r, bulb_cy + bulb_r], outline=WHITE, width=lw)
+        draw.rounded_rectangle([cx - base_w / 2, base_top, cx + base_w / 2, base_top + base_h],
+                                radius=s * 0.02, outline=WHITE, width=lw)
+        for frac in (0.35, 0.65):
+            y = base_top + base_h * frac
+            draw.line([cx - base_w / 2 + s * 0.02, y, cx + base_w / 2 - s * 0.02, y],
+                       fill=WHITE, width=thread_lw)
+
+    if hidden:
+        pad = s * 0.05
+        top_y = bulb_cy - bulb_r - pad
+        bottom_y = base_top + base_h + pad
+        draw.line([cx - bulb_r - pad, bottom_y, cx + bulb_r + pad, top_y], fill=WHITE, width=lw + 2)
+
+
 def draw_record(draw, cx, cy, s, filled):
     r = s * 0.24
     lw = max(3, int(s * 0.06))
@@ -253,6 +300,42 @@ def draw_chevron(draw, cx, cy, s, up):
         pts_r = [(cx, cy + h / 2), (cx + w / 2, cy - h / 2)]
     draw.line(pts_l, fill=WHITE, width=lw, joint="curve")
     draw.line(pts_r, fill=WHITE, width=lw, joint="curve")
+
+
+def draw_gauge(draw, cx, cy, s, needle_deg):
+    """Speedometer-style gauge glyph for the pacing-status action: a dome-shaped arc (same
+    180->360 PIL arc convention as draw_padlock's shackle) spanning the top half of a circle, 3
+    zone tick marks at -60/0/+60 degrees from vertical (slow/good/fast), and a center hub.
+    `needle_deg` points the needle at one of those same 3 angles (-60=slow/left, 0=good/center,
+    +60=fast/right); passing None omits the needle entirely, for the neutral "not enough data
+    yet" state — the bare arc+ticks+hub alone still reads clearly as "a gauge", just with no
+    reading yet."""
+    r = s * 0.30
+    hub_cy = cy + s * 0.14
+    lw = max(3, int(s * 0.055))
+
+    bbox = [cx - r, hub_cy - r, cx + r, hub_cy + r]
+    draw.arc(bbox, start=180, end=360, fill=WHITE, width=lw)
+
+    tick_len = s * 0.08
+    tick_lw = max(2, int(s * 0.035))
+    for deg in (-60, 0, 60):
+        theta = math.radians(deg)
+        x1 = cx + r * math.sin(theta)
+        y1 = hub_cy - r * math.cos(theta)
+        x2 = cx + (r + tick_len) * math.sin(theta)
+        y2 = hub_cy - (r + tick_len) * math.cos(theta)
+        draw.line([x1, y1, x2, y2], fill=WHITE, width=tick_lw)
+
+    if needle_deg is not None:
+        theta = math.radians(needle_deg)
+        needle_len = r * 0.85
+        tip_x = cx + needle_len * math.sin(theta)
+        tip_y = hub_cy - needle_len * math.cos(theta)
+        draw.line([cx, hub_cy, tip_x, tip_y], fill=WHITE, width=lw)
+
+    hub_r = s * 0.055
+    draw.ellipse([cx - hub_r, hub_cy - hub_r, cx + hub_r, hub_cy + hub_r], fill=WHITE)
 
 
 # ── Per-action icon builders ────────────────────────────────────────────────────────────────
@@ -319,6 +402,28 @@ def gen_all_actions():
     build("dial-voice-scroll-speed", {"icon": ("pink", draw_dial_knob), "key": ("pink", draw_dial_knob)})
     build("dial-scroll-step", {"icon": ("violet", draw_dial_knob), "key": ("violet", draw_dial_knob)})
     build("dial-voice-threshold", {"icon": ("gold", draw_dial_knob), "key": ("gold", draw_dial_knob)})
+    build("toggle-insights", {
+        "closed": (None, lambda d, x, y, s: draw_lightbulb(d, x, y, s, filled=False)),
+        "open":   ("yellow", lambda d, x, y, s: draw_lightbulb(d, x, y, s, filled=True)),
+        "icon":   ("yellow", lambda d, x, y, s: draw_lightbulb(d, x, y, s, filled=True)),
+    })
+    build("lock-insights", {
+        "unlocked": (None, lambda d, x, y, s: draw_padlock(d, x, y, s, locked=False)),
+        "locked":   ("indigo", lambda d, x, y, s: draw_padlock(d, x, y, s, locked=True)),
+        "icon":     ("indigo", lambda d, x, y, s: draw_padlock(d, x, y, s, locked=True)),
+    })
+    build("hide-insights-share", {
+        "visible": (None, lambda d, x, y, s: draw_lightbulb(d, x, y, s, filled=False, hidden=False)),
+        "hidden":  ("red", lambda d, x, y, s: draw_lightbulb(d, x, y, s, filled=False, hidden=True)),
+        "icon":    ("red", lambda d, x, y, s: draw_lightbulb(d, x, y, s, filled=False, hidden=True)),
+    })
+    build("pacing-status", {
+        "slow": ("yellow", lambda d, x, y, s: draw_gauge(d, x, y, s, needle_deg=-60)),
+        "good": ("green",  lambda d, x, y, s: draw_gauge(d, x, y, s, needle_deg=0)),
+        "fast": ("red",    lambda d, x, y, s: draw_gauge(d, x, y, s, needle_deg=60)),
+        "none": (None,     lambda d, x, y, s: draw_gauge(d, x, y, s, needle_deg=None)),
+        "icon": (None,     lambda d, x, y, s: draw_gauge(d, x, y, s, needle_deg=None)),
+    })
 
 
 def gen_plugin_icons():

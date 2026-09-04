@@ -54,6 +54,11 @@ public sealed class RemoteState
     /// PacingAnalyzer), or a neutral "not enough data" message — same text shown in the
     /// Controller's USAGE &amp; CONVERSATION card, never on the TP itself.</summary>
     public string PacingSummary            { get; set; } = "";
+    /// <summary>"None" | "Slow" | "Good" | "Fast" — coarse pacing classification mirroring
+    /// <see cref="OnAirNative.Services.PacingLevel"/>, kept separate from
+    /// <see cref="PacingSummary"/>'s free English text specifically so the Stream Deck plugin's
+    /// pacing-status tile can pick an icon by simple string match instead of parsing a sentence.</summary>
+    public string PacingLevel               { get; set; } = "None";
     /// <summary>Follow-up questions the presenter could ask the client next (see
     /// AiChatService.GetFollowUpSuggestionsAsync) — empty unless AppConfig.
     /// ShowFollowUpSuggestions is on AND the most recent turn actually returned some.</summary>
@@ -65,6 +70,28 @@ public sealed class RemoteState
     /// Script and Q&amp;A modes) — set via the "showInsight" op / onair_show_insight tool, cleared
     /// via "clearInsight" / onair_clear_insight. Empty means no insight is currently shown.</summary>
     public string InsightText              { get; set; } = "";
+
+    // ── AI Insights window (separate resizable Controller-tab-driven window) ─────────────────
+    // Mirrors the equivalent TP fields above (TpOpen/TpLocked/TpHiddenInShare/FontSize/Opacity/
+    // FontFamily) but for the independent floating InsightWindow — see InsightsTabViewModel and
+    // InsightAppearanceConfig for the source of truth. As with FontColor, InsightFontColor is
+    // settable (SetRemoteField / onair_set_insight_font_color) but deliberately not mirrored here
+    // (colors aren't dial/key-display-friendly).
+
+    /// <summary>Whether the AI Insights window is currently open/visible.</summary>
+    public bool   InsightsOpen             { get; set; }
+    /// <summary>Whether the AI Insights window is currently locked (click-through, can't be
+    /// accidentally moved).</summary>
+    public bool   InsightsLocked           { get; set; }
+    /// <summary>Whether the AI Insights window is currently hidden from screen share/recording.</summary>
+    public bool   InsightsHiddenInShare    { get; set; }
+    /// <summary>Font size (points) of the AI Insights window's text.</summary>
+    public int    InsightFontSize          { get; set; }
+    /// <summary>Opacity of the AI Insights window, as a 0-100 percentage (same convention as
+    /// <see cref="Opacity"/>).</summary>
+    public double InsightOpacity           { get; set; }
+    /// <summary>Font family of the AI Insights window's text.</summary>
+    public string InsightFontFamily        { get; set; } = "";
 }
 
 /// <summary>

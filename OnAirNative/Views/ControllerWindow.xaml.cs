@@ -10,13 +10,14 @@ namespace OnAirNative.Views;
 
 /// <summary>
 /// Controller window — the presenter's control panel.
-/// Contains 5 tabs (Script, Q&amp;A, App Stealth, Settings, About) plus the footer
+/// Contains 6 tabs (Script, Q&amp;A, AI Insights, App Stealth, Settings, About) plus the footer
 /// overlay/visibility and screen-share protection toggles.
 /// </summary>
 public sealed partial class ControllerWindow : Window
 {
     public ControllerViewModel ViewModel { get; private set; } = null!;
     public OverlayWindow?      Overlay   { get; set; }
+    public InsightWindow?      Insights  { get; set; }
 
     private IntPtr _hwnd;
     // Guard flag: true while PopulateStaticUi is running.
@@ -114,6 +115,19 @@ public sealed partial class ControllerWindow : Window
             OverlayProtectToggle.IsChecked = App.Config.Current.OverlayProtected;
             SyncOverlayProtectToggle(App.Config.Current.OverlayProtected);
 
+            // AI Insights window starts hidden — sync the toggle button
+            InsightsToggle.IsChecked = false;
+            SyncInsightsToggle(false);
+
+            // AI Insights window starts unlocked (interactive so it can be positioned/resized)
+            InsightsLockToggle.IsChecked = false;
+            SyncInsightsLockToggle(false);
+
+            // AI Insights screen-share protection state (applied by InsightWindow itself on
+            // its own first-activate; here we just sync the footer toggle to match).
+            InsightsProtectToggle.IsChecked = App.Config.Current.InsightWindowProtected;
+            SyncInsightsProtectToggle(App.Config.Current.InsightWindowProtected);
+
             File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} OnFirstActivated done\n");
         }
         catch (Exception ex)
@@ -170,6 +184,19 @@ public sealed partial class ControllerWindow : Window
                 WindowService.SetOpacity(WindowService.GetHwnd(Overlay), b);
         };
 
+        // AI Insights tab — independent appearance for the floating InsightWindow (see
+        // InsightsTabViewModel/InsightAppearanceConfig). Mirrors the ScrollTab.OpacityChanged
+        // wiring above, just targeting the Insights window instead of the TP.
+        ViewModel.InsightsTab.OpacityChanged += (_, opacity) =>
+        {
+            var b = (byte)(opacity * 255);
+            if (Insights is not null)
+                WindowService.SetOpacity(WindowService.GetHwnd(Insights), b);
+        };
+        ViewModel.InsightsTab.FontSizeChanged   += (_, size)   => Insights?.SetFontSize(size);
+        ViewModel.InsightsTab.FontFamilyChanged += (_, family) => Insights?.SetFontFamily(family);
+        ViewModel.InsightsTab.FontColorChanged  += (_, color)  => Insights?.SetFontColor(color);
+
         // Keep FileNameText live when a new script is loaded
         ViewModel.ScrollTab.PropertyChanged += (_, e) =>
         {
@@ -184,6 +211,10 @@ public sealed partial class ControllerWindow : Window
 
         // Same pattern for the Settings → KNOWLEDGE BASE file list.
         ViewModel.AiTab.KnowledgeBaseFiles.CollectionChanged += (_, _) => PopulateKnowledgeBaseFiles();
+
+        // AI Insights tab's FOLLOW-UP SUGGESTIONS card — same source collection as the TP's own
+        // FollowUpSuggestionsPanel (OverlayWindow.xaml.cs.PopulateFollowUpSuggestions).
+        Overlay.ViewModel.FollowUpSuggestions.CollectionChanged += (_, _) => PopulateInsightFollowUpSuggestions();
 
         // Sync LockToggle when move mode changes (e.g., via Ctrl+Alt+Home hotkey).
         // Setting IsChecked (not just calling SyncLockToggle) keeps the button's actual
@@ -200,12 +231,21 @@ public sealed partial class ControllerWindow : Window
                 UpdateQaSessionStatusText();
             else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.PacingSummary))
                 PacingSummaryText.Text = Overlay.ViewModel.PacingSummary;
+            // AI Insights tab's Q&A RECAP card — same source data as the TP's own QaQuestionText/
+            // QaAnswerText (OverlayWindow.xaml.cs), just mirrored into the Controller tab so the
+            // presenter (or someone reviewing the Controller alone) can see the last Q&A turn.
+            else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.QaQuestion))
+                InsightQaQuestionText.Text = string.IsNullOrEmpty(Overlay.ViewModel.QaQuestion) ? "(none yet)" : Overlay.ViewModel.QaQuestion;
+            else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.QaAnswer))
+                InsightQaAnswerText.Text = string.IsNullOrEmpty(Overlay.ViewModel.QaAnswer) ? "(none yet)" : Overlay.ViewModel.QaAnswer;
             // Block 6: push an immediate state broadcast (rather than waiting up to 2s for the
-            // safety-net timer) the instant either changes — a monitoring MCP agent polling
-            // QaTurnCount, or a live WS observer waiting on the insight footer, should see the
-            // new value with as little latency as the WS protocol allows.
+            // safety-net timer) the instant any of these change — a monitoring MCP agent polling
+            // QaTurnCount, or a live WS observer waiting on the insight footer or the Stream
+            // Deck's pacing-status tile, should see the new value with as little latency as the
+            // WS protocol allows.
             else if (e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.QaTurnCount) ||
-                     e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.InsightText))
+                     e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.InsightText) ||
+                     e.PropertyName == nameof(OnAirNative.ViewModels.OverlayViewModel.PacingLevel))
                 App.RemoteControl?.NotifyStateMayHaveChanged();
         };
 
@@ -266,6 +306,23 @@ public sealed partial class ControllerWindow : Window
             FileNameText.Text = ViewModel.ScrollTab.LoadedFileName;
             PopulateChapters();
             CustomColorBox.Text = App.Config.Current.Appearance.FontColor;
+
+            // AI Insights tab — appearance controls for the floating InsightWindow, independent
+            // from the TP's own font/opacity sliders above (see InsightAppearanceConfig).
+            InsightFontSizeSlider.Minimum = 10;
+            InsightFontSizeSlider.Maximum = 64;
+            InsightFontSizeSlider.Value   = ViewModel.InsightsTab.FontSize;
+            InsightOpacitySlider.Minimum  = 10;
+            InsightOpacitySlider.Maximum  = 100;
+            InsightOpacitySlider.Value    = ViewModel.InsightsTab.Opacity * 100;
+            PopulateInsightFontFamilies();
+            InsightCustomColorBox.Text = App.Config.Current.InsightAppearance.FontColor;
+
+            // AI Insights tab — Q&A recap + follow-up suggestions, seeded with whatever the TP
+            // is already showing (both start empty on a fresh app launch).
+            InsightQaQuestionText.Text = string.IsNullOrEmpty(Overlay?.ViewModel.QaQuestion) ? "(none yet)" : Overlay!.ViewModel.QaQuestion;
+            InsightQaAnswerText.Text   = string.IsNullOrEmpty(Overlay?.ViewModel.QaAnswer)   ? "(none yet)" : Overlay!.ViewModel.QaAnswer;
+            PopulateInsightFollowUpSuggestions();
 
             // About
             VersionText.Text = $"v{ViewModel.AboutTab.Version}";
@@ -394,6 +451,7 @@ public sealed partial class ControllerWindow : Window
     {
         ("script",   TabScript,   TabScriptText),
         ("qa",       TabQa,       TabQaText),
+        ("insights", TabInsights, TabInsightsText),
         ("stealth",  TabStealth,  TabStealthText),
         ("settings", TabSettings, TabSettingsText),
         ("about",    TabAbout,    TabAboutText),
@@ -417,6 +475,7 @@ public sealed partial class ControllerWindow : Window
 
         ScrollPanel.Visibility   = tag == "script"   ? Visibility.Visible : Visibility.Collapsed;
         AiPanel.Visibility       = tag == "qa"       ? Visibility.Visible : Visibility.Collapsed;
+        InsightsPanel.Visibility = tag == "insights" ? Visibility.Visible : Visibility.Collapsed;
         StealthPanel.Visibility  = tag == "stealth"  ? Visibility.Visible : Visibility.Collapsed;
         SettingsPanel.Visibility = tag == "settings" ? Visibility.Visible : Visibility.Collapsed;
         AboutPanel.Visibility    = tag == "about"    ? Visibility.Visible : Visibility.Collapsed;
@@ -821,9 +880,16 @@ public sealed partial class ControllerWindow : Window
         LastAnswer              = Overlay?.ViewModel.QaAnswer ?? "",
         QaTurnCount             = Overlay?.ViewModel.QaTurnCount ?? 0,
         PacingSummary           = Overlay?.ViewModel.PacingSummary ?? "",
+        PacingLevel             = Overlay?.ViewModel.PacingLevel ?? "None",
         FollowUpSuggestions     = Overlay?.ViewModel.FollowUpSuggestions.ToList() ?? [],
         QaSessionActive         = Overlay?.ViewModel.IsQaSessionActive ?? false,
         InsightText             = Overlay?.ViewModel.InsightText ?? "",
+        InsightsOpen            = InsightsToggle?.IsChecked ?? false,
+        InsightsLocked          = InsightsLockToggle?.IsChecked ?? false,
+        InsightsHiddenInShare   = InsightsProtectToggle?.IsChecked ?? false,
+        InsightFontSize         = ViewModel.InsightsTab.FontSize,
+        InsightOpacity          = ViewModel.InsightsTab.Opacity * 100.0,
+        InsightFontFamily       = ViewModel.InsightsTab.FontFamily,
     };
 
     /// <summary>Applies an absolute setter value by field name — the MCP server's write path.
@@ -930,6 +996,47 @@ public sealed partial class ControllerWindow : Window
                         case "Voice":  ScrollVoiceRadio.IsChecked  = true; break;
                         default: return (false, "ScrollMode must be Manual, Auto, or Voice");
                     }
+                    return (true, null);
+                }
+                case "InsightFontSize":
+                {
+                    var v = (int)Math.Clamp(value.GetInt32(), (int)InsightFontSizeSlider.Minimum, (int)InsightFontSizeSlider.Maximum);
+                    _populatingUi = true;
+                    try { ViewModel.InsightsTab.FontSize = v; InsightFontSizeSlider.Value = v; }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
+                case "InsightOpacity":
+                {
+                    var pct = Math.Clamp(value.GetDouble(), InsightOpacitySlider.Minimum, InsightOpacitySlider.Maximum);
+                    _populatingUi = true;
+                    try { ViewModel.InsightsTab.Opacity = pct / 100.0; InsightOpacitySlider.Value = pct; }
+                    finally { _populatingUi = false; }
+                    return (true, null);
+                }
+                case "InsightFontColor":
+                {
+                    var hex = value.GetString() ?? "";
+                    if (!hex.StartsWith('#')) hex = "#" + hex;
+                    if (!HexColorPattern.IsMatch(hex))
+                        return (false, "Enter a valid hex color, e.g. #FF8800");
+                    ViewModel.InsightsTab.SetFontColor(hex);
+                    InsightCustomColorBox.Text = hex;
+                    return (true, null);
+                }
+                case "InsightFontFamily":
+                {
+                    var family = value.GetString() ?? "";
+                    var installed = GetInstalledFontFamilies();
+                    if (!installed.Contains(family))
+                        return (false, $"Font family not installed: {family}");
+                    _populatingUi = true;
+                    try
+                    {
+                        ViewModel.InsightsTab.FontFamily = family;
+                        InsightFontFamilyCombo.SelectedItem = family;
+                    }
+                    finally { _populatingUi = false; }
                     return (true, null);
                 }
                 default:
@@ -1181,6 +1288,97 @@ public sealed partial class ControllerWindow : Window
             ViewModel.ScrollTab.FontFamily = family;
     }
 
+    // ── AI Insights tab — appearance (independent from the TP's own Appearance card above) ──
+
+    private void InsightFontSizeSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (_populatingUi) return;
+        ViewModel.InsightsTab.FontSize = (int)e.NewValue;
+    }
+
+    private void InsightOpacitySlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (_populatingUi) return;
+        ViewModel.InsightsTab.Opacity = e.NewValue / 100.0;
+    }
+
+    /// <summary>Applies a preset swatch's color immediately and mirrors its hex value into the
+    /// editable InsightCustomColorBox — same pattern as the TP's own FontColor_Click.</summary>
+    private void InsightFontColor_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is not string hex) return;
+        ViewModel.InsightsTab.SetFontColor(hex);
+        InsightCustomColorBox.Text = hex;
+    }
+
+    private void InsightApplyCustomColor_Click(object sender, RoutedEventArgs e) => ApplyInsightCustomColor();
+
+    private void InsightCustomColorBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Enter) ApplyInsightCustomColor();
+    }
+
+    /// <summary>Validates and applies the user-typed hex color for the AI Insights window, via
+    /// the same SetFontColor path used by the preset swatches. Accepts "#RRGGBB" (with or
+    /// without the leading '#').</summary>
+    private void ApplyInsightCustomColor()
+    {
+        var text = InsightCustomColorBox.Text.Trim();
+        if (!text.StartsWith('#')) text = "#" + text;
+
+        if (!HexColorPattern.IsMatch(text))
+        {
+            InsightCustomColorErrorText.Text       = "Enter a valid hex color, e.g. #FF8800";
+            InsightCustomColorErrorText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        InsightCustomColorErrorText.Visibility = Visibility.Collapsed;
+        ViewModel.InsightsTab.SetFontColor(text);
+        InsightCustomColorBox.Text = text; // normalizes a leading '#' the user may have omitted
+    }
+
+    private void InsightFontFamilyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_populatingUi) return;
+        if (InsightFontFamilyCombo.SelectedItem is string family)
+            ViewModel.InsightsTab.FontFamily = family;
+    }
+
+    /// <summary>Same enumeration as <see cref="PopulateFontFamilies"/> (installed fonts via
+    /// <see cref="GetInstalledFontFamilies"/>), targeting the AI Insights tab's own combo/config
+    /// instead of the TP's.</summary>
+    private void PopulateInsightFontFamilies()
+    {
+        var installed = GetInstalledFontFamilies();
+        InsightFontFamilyCombo.ItemsSource = installed;
+
+        var current = ViewModel.InsightsTab.FontFamily;
+        InsightFontFamilyCombo.SelectedItem = installed.Contains(current) ? current : installed.FirstOrDefault();
+    }
+
+    /// <summary>Rebuilds the AI Insights tab's follow-up-suggestion lines from
+    /// OverlayViewModel.FollowUpSuggestions — same source collection and text pattern as
+    /// OverlayWindow.xaml.cs's PopulateFollowUpSuggestions (the TP's own copy), just mirrored
+    /// here so the presenter can review the same list from the Controller tab.</summary>
+    private void PopulateInsightFollowUpSuggestions()
+    {
+        InsightFollowUpSuggestionsPanel.Children.Clear();
+        var suggestions = Overlay?.ViewModel.FollowUpSuggestions;
+        if (suggestions is null || suggestions.Count == 0) return;
+
+        foreach (var suggestion in suggestions)
+        {
+            InsightFollowUpSuggestionsPanel.Children.Add(new TextBlock
+            {
+                Text         = $"•  {suggestion}",
+                FontSize     = 13,
+                TextWrapping = TextWrapping.Wrap,
+                Opacity      = 0.85,
+            });
+        }
+    }
+
     private void ResetSettings_Click(object sender, RoutedEventArgs e)
     {
         ViewModel.ScrollTab.ScrollStep       = 120;
@@ -1239,6 +1437,84 @@ public sealed partial class ControllerWindow : Window
     /// <summary>Toggles "Hide TP" (visible/hidden in share) — used by the Ctrl+Alt+S global hotkey.</summary>
     public void ToggleOverlayCaptureProtection() =>
         OverlayProtectToggle.IsChecked = !(OverlayProtectToggle.IsChecked ?? false);
+
+    // ── Footer: AI Insights window visibility (Open Insights) ────────────────
+
+    private void InsightsToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        SyncInsightsToggle(true);
+        if (Insights is not null) WindowService.ShowWindow(Insights);
+    }
+
+    private void InsightsToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        SyncInsightsToggle(false);
+        if (Insights is not null) WindowService.HideWindow(Insights);
+    }
+
+    /// <summary>Syncs the "Open Insights" toggle's checked state without re-triggering
+    /// Checked/Unchecked (mirrors SyncOverlayToggle).</summary>
+    public void SyncInsightsToggle(bool visible)
+    {
+        if (InsightsToggle is null) return;
+        InsightsToggle.IsChecked = visible;
+    }
+
+    /// <summary>Toggles the AI Insights window open/hidden — used by the Ctrl+Alt+I global hotkey.</summary>
+    public void ToggleInsightsVisibility() =>
+        InsightsToggle.IsChecked = !(InsightsToggle.IsChecked ?? false);
+
+    // ── Footer: Lock / unlock the AI Insights window ──────────────────────────
+
+    private void InsightsLockToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        SyncInsightsLockToggle(true);
+        Insights?.SetLocked(true);
+    }
+
+    private void InsightsLockToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        SyncInsightsLockToggle(false);
+        Insights?.SetLocked(false);
+    }
+
+    /// <summary>Syncs the "Lock Insights" toggle's checked state (mirrors SyncLockToggle).</summary>
+    public void SyncInsightsLockToggle(bool locked)
+    {
+        if (InsightsLockToggle is null) return;
+        InsightsLockToggle.IsChecked = locked;
+    }
+
+    /// <summary>Toggles "Lock Insights" — used by the Ctrl+Alt+L global hotkey.</summary>
+    public void ToggleInsightsLock() =>
+        InsightsLockToggle.IsChecked = !(InsightsLockToggle.IsChecked ?? false);
+
+    // ── Footer: Hide Insights (screen-share protection) ───────────────────────
+
+    private void InsightsProtectToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        App.Config.Current.InsightWindowProtected = true;
+        Insights?.SetContentProtection(true);
+        SyncInsightsProtectToggle(true);
+    }
+
+    private void InsightsProtectToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        App.Config.Current.InsightWindowProtected = false;
+        Insights?.SetContentProtection(false);
+        SyncInsightsProtectToggle(false);
+    }
+
+    /// <summary>Syncs the "Hide Insights" toggle's checked state (mirrors SyncOverlayProtectToggle).</summary>
+    private void SyncInsightsProtectToggle(bool protect)
+    {
+        if (InsightsProtectToggle is null) return;
+        InsightsProtectToggle.IsChecked = protect;
+    }
+
+    /// <summary>Toggles "Hide Insights" (visible/hidden in share) — used by the Ctrl+Alt+P global hotkey.</summary>
+    public void ToggleInsightsCaptureProtection() =>
+        InsightsProtectToggle.IsChecked = !(InsightsProtectToggle.IsChecked ?? false);
 
     // ── Q&A — Record button (moved from overlay) ──────────────────────────────
 

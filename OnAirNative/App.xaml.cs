@@ -22,6 +22,7 @@ public partial class App : Application
 
     private OverlayWindow?    _overlay;
     private ControllerWindow? _controller;
+    private InsightWindow?    _insightWindow;
     private Microsoft.UI.Dispatching.DispatcherQueue? _uiQueue;
 
     public App()
@@ -79,15 +80,25 @@ public partial class App : Application
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} OverlayWindow created\n");
         _controller = new ControllerWindow();
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} ControllerWindow created\n");
+        // AI Insights window — a separate, freely resizable panel independent from the TP (see
+        // Views/InsightWindow.xaml). Observes _overlay.ViewModel directly rather than owning its
+        // own copy of the insight state.
+        _insightWindow = new InsightWindow(_overlay.ViewModel);
+        File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} InsightWindow created\n");
 
         // Wire overlay → controller reference for cross-window commands
         _overlay.Controller = _controller;
         _controller.Overlay = _overlay;
+        _controller.Insights = _insightWindow;
 
         _overlay.Activate();
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} Overlay activated\n");
         // Hide overlay immediately — user shows it from Controller when ready
         _overlay.AppWindow.Hide();
+        _insightWindow.Activate();
+        // Hide Insights immediately too — same "show from Controller when ready" convention
+        _insightWindow.AppWindow.Hide();
+        File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} InsightWindow activated+hidden\n");
         _controller.Activate();
         File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} Controller activated\n");
 
@@ -130,6 +141,7 @@ public partial class App : Application
         _controller.Closed += (_, _) =>
         {
             _overlay?.SaveGeometry();
+            _insightWindow?.SaveGeometry();
             Config.Save();
             Hotkeys.Dispose();
             Tray.Dispose();
@@ -219,6 +231,15 @@ public partial class App : Application
                 break;
             case HotkeyAction.RecheckWhisperModel:
                 _controller?.RecheckWhisperModel();
+                break;
+            case HotkeyAction.ToggleInsightsVisibility:
+                _controller?.ToggleInsightsVisibility();
+                break;
+            case HotkeyAction.ToggleInsightsLock:
+                _controller?.ToggleInsightsLock();
+                break;
+            case HotkeyAction.ToggleInsightsCaptureProtection:
+                _controller?.ToggleInsightsCaptureProtection();
                 break;
         }
         RemoteControl?.NotifyStateMayHaveChanged();

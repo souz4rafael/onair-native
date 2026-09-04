@@ -27,6 +27,13 @@ public sealed record RemoteState(
     string LastAnswer,
     int QaTurnCount,
     string PacingSummary,
+    string PacingLevel,
     List<string> FollowUpSuggestions,
     bool QaSessionActive,
-    string InsightText);
+    string InsightText,
+    bool InsightsOpen,
+    bool InsightsLocked,
+    bool InsightsHiddenInShare,
+    int InsightFontSize,
+    double InsightOpacity,
+    string InsightFontFamily);
